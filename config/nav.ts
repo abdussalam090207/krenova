@@ -1,0 +1,13 @@
+export const nav = [
+  { label: "Home",     href: "/",         matchExact: true  },
+  { label: "Projects", href: "/projects", matchExact: false }, // aktif untuk /projects dan /projects/[slug]
+  { label: "About",    href: "/about",    matchExact: false },
+] as const;
+
+export type NavItem = (typeof nav)[number];
+
+/** Cek apakah item nav aktif untuk pathname saat ini */
+export function isNavActive(item: NavItem, pathname: string): boolean {
+  if (item.matchExact) return pathname === item.href;
+  return pathname === item.href || pathname.startsWith(item.href + "/");
+}

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent skill scripts & audit scripts (CJS helper scripts, not part of the Next.js app):
+    ".agents/**",
+    "scripts/**",
   ]),
 ]);
 

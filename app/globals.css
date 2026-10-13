@@ -1,26 +1,322 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────
+   TOKEN WARNA & DESAIN — KRENOVA STUDIO
+   ───────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg:      #06060B;
+  --bg-ink:  #0E1020;
+  --text:    #F4F6FB;
+  --text-2:  #B4BACB;
+  --text-3:  #858CA1;
+  --blue:    #4C7DFF;
+  --violet:  #8B6CFF;
+  --aqua:    #2DD4F0;
+  --rose:    #ff2323ed;
+
+  --input-bg: rgba(255, 255, 255, 0.06);
+
+  --glass-fill:            linear-gradient(135deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+  --glass-fill-strong:     linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.07));
+  --glass-border:          rgba(255,255,255,.14);
+  --glass-blur:            20px;
+  --glass-shadow:          0 10px 40px rgba(0,0,0,.35);
+  --glass-inset-highlight: inset 0 1px 0 rgba(255,255,255,.28);
+  --glass-sheen:           radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.18), transparent 55%);
+
+  /* Ambient background blobs — Dark Mode */
+  --ambient-base: radial-gradient(55% 45% at 15%  8%,  rgba(75,148,214,.35), transparent 70%),
+                  radial-gradient(50% 45% at 90% 40%, rgba(122,184,225,.25), transparent 70%),
+                  radial-gradient(60% 40% at 50% 100%, rgba(75,148,214,.18), transparent 70%),
+                  radial-gradient(25% 20% at 70% 10%, rgba(122,184,225,.12), transparent 70%),
+                  #06060B;
+  --blob-color-1: radial-gradient(circle, rgba(75,148,214,.7) 0%, transparent 70%);
+  --blob-opacity-1: 0.30;
+  --blob-color-2: radial-gradient(circle, rgba(122,184,225,.6) 0%, transparent 70%);
+  --blob-opacity-2: 0.25;
+  --blob-color-3: radial-gradient(circle, rgba(75,148,214,.5) 0%, transparent 70%);
+  --blob-opacity-3: 0.20;
 }
 
+/* Light Mode tokens */
+[data-theme="light"],
+html.light {
+  --bg:      #FFFFFF;
+  --bg-ink:  #F4F5F8;
+  --text:    #0E121B;
+  --text-2:  #3E4656;
+  --text-3:  #626A7E;
+  --blue:    #2563EB;
+  --violet:  #6D28D9;
+  --aqua:    #0284C7;
+  --rose:    #ff0000;
+
+  --input-bg: rgba(0, 0, 0, 0.035);
+
+  --glass-fill:            linear-gradient(135deg, rgba(255,255,255,.85), rgba(255,255,255,.58));
+  --glass-fill-strong:     linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.78));
+  --glass-border:          rgba(0,0,0,.08);
+  --glass-blur:            20px;
+  --glass-shadow:          0 12px 36px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.04);
+  --glass-inset-highlight: inset 0 1px 0 rgba(255,255,255,.95);
+  --glass-sheen:           radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.85), transparent 55%);
+
+  /* Ambient background blobs — Light Mode (#5C5C5C dan #434343) */
+  --ambient-base: radial-gradient(55% 45% at 15%  8%,  rgba(67,67,67,.08), transparent 70%),
+                  radial-gradient(50% 45% at 90% 40%, rgba(92,92,92,.07), transparent 70%),
+                  radial-gradient(60% 40% at 50% 100%, rgba(67,67,67,.06), transparent 70%),
+                  radial-gradient(25% 20% at 70% 10%, rgba(92,92,92,.04), transparent 70%),
+                  #FFFFFF;
+  --blob-color-1: radial-gradient(circle, rgba(67,67,67,.32) 0%, transparent 70%); /* #434343 */
+  --blob-opacity-1: 0.45;
+  --blob-color-2: radial-gradient(circle, rgba(92,92,92,.28) 0%, transparent 70%); /* #5C5C5C */
+  --blob-opacity-2: 0.40;
+  --blob-color-3: radial-gradient(circle, rgba(67,67,67,.26) 0%, transparent 70%); /* #434343 */
+  --blob-opacity-3: 0.35;
+}
+
+/* Tailwind v4 — token untuk utilities */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg:       var(--bg);
+  --color-bg-ink:   var(--bg-ink);
+  --color-text:     var(--text);
+  --color-text-2:   var(--text-2);
+  --color-text-3:   var(--text-3);
+  --color-blue:     var(--blue);
+  --color-violet:   var(--violet);
+  --color-aqua:     var(--aqua);
+  --color-rose:     var(--rose);
+
+  --font-display: var(--font-display);
+  --font-sans:    var(--font-body);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─────────────────────────────────────────────
+   RESET & BASE
+   ───────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─────────────────────────────────────────────
+   KELAS GLASS
+   ───────────────────────────────────────────── */
+.glass {
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-inset-highlight),
+    inset 0 -1px 0 rgba(255,255,255,.04),
+    var(--glass-shadow);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-strong {
+  background: var(--glass-fill-strong);
+}
+
+/* Kilau tipis di sudut kiri atas */
+.glass-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.glass-sheen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--glass-sheen);
+  transition: background 0.3s ease;
+}
+
+/* Fallback browser tanpa backdrop-filter */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: rgba(18,20,36,.88); }
+  [data-theme="light"] .glass, html.light .glass { background: rgba(255,255,255,.96); }
+}
+
+/* Lebih ringan di HP */
+@media (max-width: 767px) {
+  :root { --glass-blur: 14px; }
+}
+
+/* ─────────────────────────────────────────────
+   INTRO SPLASH
+   ───────────────────────────────────────────── */
+
+/* Default tersembunyi. Muncul hanya kalau flag = pending */
+#intro-splash { display: none; }
+
+html[data-intro="pending"] #intro-splash {
+  display: flex;
+  animation: intro-overlay 3.5s linear forwards;
+}
+
+.intro-text {
+  opacity: 0;
+  animation: intro-text 3s ease-in-out forwards;
+}
+
+/* 0.8s masuk | 1.4s tahan | 0.8s keluar */
+@keyframes intro-text {
+  0%   { opacity: 0; }
+  27%  { opacity: 1; }
+  73%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Hitam penuh sampai detik ke-3, lalu memudar 0.5s */
+@keyframes intro-overlay {
+  0%, 85.7% { opacity: 1; }
+  100%       { opacity: 0; }
+}
+
+/* ─────────────────────────────────────────────
+   HERO ANIMASI MASUK
+   ───────────────────────────────────────────── */
+
+/* Elemen hero menunggu splash selesai */
+html[data-intro="pending"] .wait-intro {
+  animation-play-state: paused;
+}
+
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.hero-in {
+  animation: hero-in .7s cubic-bezier(.22,1,.36,1) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+/* ─────────────────────────────────────────────
+   FOCUS RING GLOBAL
+   ───────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--aqua);
+  outline-offset: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   PREFERS-REDUCED-MOTION
+   ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .hero-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .wait-intro {
+    animation-play-state: running;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   SKELETON SHIMMER (Projects grid)
+   ───────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.animate-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255,255,255,.05) 25%,
+    rgba(255,255,255,.12) 50%,
+    rgba(255,255,255,.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+[data-theme="light"] .animate-skeleton,
+html.light .animate-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(0,0,0,.04) 25%,
+    rgba(0,0,0,.09) 50%,
+    rgba(0,0,0,.04) 75%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-skeleton {
+    animation: none;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   HERO RESPONSIVE GRID
+   Mobile (<768px):
+     Baris 1: Title (kiri) | Banner (kanan)
+     Baris 2: Deskripsi (bawah full)
+     Baris 3: CTA Tombol (bawah full)
+   Desktop (>=768px):
+     Kolom Kiri: Title (baris 1) -> Desc (baris 2) -> CTA (baris 3)
+     Kolom Kanan: Banner spanning seluruh baris
+   ───────────────────────────────────────────── */
+.hero-layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(145px, 235px);
+  grid-template-areas:
+    "title banner"
+    "desc  desc"
+    "cta   cta";
+  column-gap: 1rem;
+  row-gap: 0rem;
+  align-items: center;
+}
+
+.hero-title  { grid-area: title; }
+.hero-banner { grid-area: banner; }
+.hero-desc   { grid-area: desc; }
+.hero-cta    { grid-area: cta; }
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .hero-layout {
+    grid-template-columns: 1fr minmax(180px, 240px);
+    column-gap: 1.5rem;
+    row-gap: 1rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .hero-layout {
+    grid-template-columns: 1.1fr 0.9fr;
+    grid-template-areas:
+      "title banner"
+      "desc  banner"
+      "cta   banner";
+    column-gap: 2.75rem;
+    row-gap: 1.5rem;
+    align-items: center;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-layout {
+    grid-template-columns: 1.15fr 0.85fr;
+    column-gap: 3.5rem;
+  }
 }
