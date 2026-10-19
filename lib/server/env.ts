@@ -33,7 +33,7 @@ export const env = {
   R2_PUBLIC_BUCKET_NAME:  process.env.R2_PUBLIC_BUCKET_NAME || "catalog-media",
   R2_PRIVATE_BUCKET_NAME: process.env.R2_PRIVATE_BUCKET_NAME || "catalog-private",
   get NEXT_PUBLIC_R2_PUBLIC_URL(): string { return requireEnv("NEXT_PUBLIC_R2_PUBLIC_URL"); },
-  ADMIN_ALLOWED_ORIGINS:  (process.env.ADMIN_ALLOWED_ORIGINS || "http://localhost:5500,http://127.0.0.1:5500")
+  ADMIN_ALLOWED_ORIGINS:  (process.env.ADMIN_ALLOWED_ORIGINS || "https://krenovas.my.id,https://admin.krenovas.my.id,http://localhost:5500,http://127.0.0.1:5500,http://localhost:3000")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
