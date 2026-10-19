@@ -1,7 +1,8 @@
 export const nav = [
-  { label: "Home",     href: "/",         matchExact: true  },
-  { label: "Projects", href: "/projects", matchExact: false }, // aktif untuk /projects dan /projects/[slug]
-  { label: "About",    href: "/about",    matchExact: false },
+  { label: "Beranda",     href: "/",         matchExact: true  },
+  { label: "Proyek", href: "/projects", matchExact: false }, // aktif untuk /projects dan /projects/[slug]
+  { label: "Katalog",  href: "/katalog",  matchExact: false }, // aktif untuk /katalog dan /katalog/**
+  { label: "Tentang",    href: "/about",    matchExact: false },
 ] as const;
 
 export type NavItem = (typeof nav)[number];

@@ -159,6 +159,45 @@ body {
   :root { --glass-blur: 14px; }
 }
 
+/* Glass Popover / Floating Dropdown Menu */
+.glass-popover {
+  background: rgba(66, 67, 74, 0.88);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(34px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 20px 50px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="light"] .glass-popover,
+html.light .glass-popover {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 15px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Custom Glass Scrollbar */
+.glass-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+.glass-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.glass-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+}
+.glass-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
 /* ─────────────────────────────────────────────
    INTRO SPLASH
    ───────────────────────────────────────────── */

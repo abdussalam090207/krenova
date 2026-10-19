@@ -1,8 +1,7 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # Dependencies
 /node_modules
 /.pnp
+.pnp.js
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,37 +9,37 @@
 !.yarn/releases
 !.yarn/versions
 
-AUDIT.md
-AUDIT_REPORT.md
-
 # Testing
 /coverage
 
-# Next.js build & export
+# Next.js Build & Outputs
 /.next/
 /out/
 /build
-
-# Environment files
-.env*
-!.env.example
-
-# Runtime & Local data
-data/visitors.json
-data/*.json
-
-# Vercel
-.vercel
-
-# TypeScript
+/dist
 *.tsbuildinfo
 next-env.d.ts
 
-# Local agent tools & temporary scripts
-.agents/
-scripts/
+# Production & Local Environment Files
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*
+!.env.example
 
-# OS generated files
+# Vercel Deployment Files
+/.vercel
+
+# Logs & Debugging
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# OS & Editor Specific Files
 .DS_Store
 .DS_Store?
 ._*
@@ -49,19 +48,25 @@ scripts/
 ehthumbs.db
 Thumbs.db
 [Dd]esktop.ini
-
-# Logs & debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# IDE & Editor files
-.vscode/
+*.pem
+*.key
 .idea/
+.vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
+*.swp
 *.sw?
-*.pem
+
+# Temporary Downloads/Media
+/public/tmp
+/downloads
+
+# Local Data, Agents, and Audit Logs
+data/visitors.json
+data/*.json
+.agents/
+scripts/
+AUDIT.md
+AUDIT_REPORT.md

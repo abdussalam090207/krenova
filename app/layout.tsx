@@ -63,24 +63,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="shortcut icon" href="/logo.png" />
         <link rel="apple-touch-icon" href="/logo.png" />
         {/* Anti-FOUC script — tentukan tema sebelum browser melakukan paint pertama */}
-        <script
-          id="theme-flag"
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var t = localStorage.getItem("krenova:theme") || "dark";
-                document.documentElement.setAttribute("data-theme", t);
-                if (t === "light") {
-                  document.documentElement.classList.add("light");
-                  document.documentElement.classList.remove("dark");
-                } else {
-                  document.documentElement.classList.add("dark");
-                  document.documentElement.classList.remove("light");
-                }
-              } catch (e) {}
-            `,
-          }}
-        />
+        <Script id="theme-flag" strategy="beforeInteractive">{`
+          try {
+            var t = localStorage.getItem("krenova:theme") || "dark";
+            document.documentElement.setAttribute("data-theme", t);
+            if (t === "light") {
+              document.documentElement.classList.add("light");
+              document.documentElement.classList.remove("dark");
+            } else {
+              document.documentElement.classList.add("dark");
+              document.documentElement.classList.remove("light");
+            }
+          } catch (e) {}
+        `}</Script>
       </head>
       <body>
         <ThemeProvider>

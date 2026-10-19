@@ -1,10 +1,10 @@
+import { publicMediaUrl, type StorageBackend } from "@/lib/storage/urls";
+
 const BUCKET = "project-media";
 
-export const storageUrl = (path?: string | null): string | null => {
+export const storageUrl = (path?: string | null, backend?: StorageBackend | null): string | null => {
   if (!path) return null;
-  if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  return `${base}/storage/v1/object/public/${BUCKET}/${encodeURI(path)}`;
+  return publicMediaUrl(backend, BUCKET, path);
 };
 
 /** Ekstrak YouTube video ID dari berbagai format URL */

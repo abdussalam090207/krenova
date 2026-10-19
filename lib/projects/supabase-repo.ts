@@ -43,6 +43,7 @@ function sanitizeSearch(q: string): string {
 // ─── Peta kolom snake_case → camelCase ───────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapProject(row: any): Project {
+  const backend = (row.storage_backend as import("@/lib/storage/urls").StorageBackend) || "supabase";
   const youtubeId = row.external_url ? parseYouTubeId(row.external_url) : null;
   const mediaPath = row.media_path as string | null;
   const thumbPath = row.thumb_path as string | null;
@@ -61,15 +62,15 @@ function mapProject(row: any): Project {
     : fallbackAspect(resolvedMediaType);
 
   const thumbSrc =
-    storageUrl(thumbPath ?? mediaPath) ?? (youtubeId ? youtubeThumb(youtubeId) : null) ?? undefined;
+    storageUrl(thumbPath ?? mediaPath, backend) ?? (youtubeId ? youtubeThumb(youtubeId) : null) ?? undefined;
   const fullSrc =
-    storageUrl(mediaPath) ?? (youtubeId ? youtubeThumb(youtubeId) : null) ?? undefined;
+    storageUrl(mediaPath, backend) ?? (youtubeId ? youtubeThumb(youtubeId) : null) ?? undefined;
 
   // Kumpulkan semua URL media
   const mediaUrls: string[] = [];
   if (Array.isArray(row.media_urls) && row.media_urls.length > 0) {
     for (const u of row.media_urls) {
-      const url = u.startsWith("http") ? u : (storageUrl(u) ?? u);
+      const url = u.startsWith("http") ? u : (storageUrl(u, backend) ?? u);
       if (url) mediaUrls.push(url);
     }
   } else if (fullSrc) {
@@ -80,7 +81,7 @@ function mapProject(row: any): Project {
   let videoSrc: string | null = null;
   if (isVideo) {
     if (mediaPath) {
-      videoSrc = storageUrl(mediaPath) ?? (mediaPath.startsWith("http") ? mediaPath : null);
+      videoSrc = storageUrl(mediaPath, backend) ?? (mediaPath.startsWith("http") ? mediaPath : null);
     }
     if (!videoSrc && mediaUrls.length > 0) {
       const vid = mediaUrls.find((u) => /\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(u));

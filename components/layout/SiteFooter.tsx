@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Users, Heart, MessageSquare, Eye } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -78,6 +79,13 @@ export function SiteFooter() {
     "Halo KRENOVA STUDIO, saya punya project dan ingin ceritakan kebutuhannya.",
   );
 
+  const pathname = usePathname();
+
+  // Sembunyikan footer di halaman pesanan / penerimaan produk
+  if (pathname?.startsWith("/katalog/pesanan")) {
+    return null;
+  }
+
   return (
     <footer className="px-4 pb-8 pt-4 md:px-8">
       <GlassCard className="rounded-[32px] overflow-hidden">
@@ -153,6 +161,14 @@ export function SiteFooter() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  href="/katalog/syarat"
+                  className="text-sm text-[--text-3] hover:text-[--text] transition-colors duration-150"
+                >
+                  Syarat Katalog
+                </Link>
+              </li>
             </ul>
           </div>
 

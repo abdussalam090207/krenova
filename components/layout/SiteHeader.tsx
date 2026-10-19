@@ -52,6 +52,11 @@ export function SiteHeader() {
     setSidebarOpen(false);
   }
 
+  // Sembunyikan header navigasi di halaman pesanan / penerimaan produk
+  if (pathname?.startsWith("/katalog/pesanan")) {
+    return null;
+  }
+
   return (
     <>
       {/* ── Desktop Header ─────────────────────────────── */}
