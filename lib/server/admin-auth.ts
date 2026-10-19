@@ -28,13 +28,19 @@ export function getCorsHeaders(req: NextRequest): Record<string, string> {
     (o) => o.toLowerCase() === origin.toLowerCase(),
   );
 
-  // Fallback aman untuk dev: izinkan localhost / 127.0.0.1 / LAN IP pada port Live Server (5500, 5501, 3000, 5173)
+  // Fallback aman untuk dev/VPN/LAN: izinkan localhost / 127.0.0.1 / private IP (192.168.x, 10.x, 172.16-31.x, Tailscale 100.x)
   if (!isAllowed) {
     try {
       const u = new URL(origin);
-      const isLocalHost = u.hostname === "localhost" || u.hostname === "127.0.0.1" || /^192\.168\.\d+\.\d+$/.test(u.hostname) || /^10\.\d+\.\d+\.\d+$/.test(u.hostname);
-      const isDevPort = ["5500", "5501", "3000", "5173", "8080"].includes(u.port);
-      if (isLocalHost && isDevPort) {
+      const isPrivateOrLocalHost =
+        u.hostname === "localhost" ||
+        u.hostname === "127.0.0.1" ||
+        /^192\.168\.\d+\.\d+$/.test(u.hostname) ||
+        /^10\.\d+\.\d+\.\d+$/.test(u.hostname) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+$/.test(u.hostname) ||
+        /^100\.\d+\.\d+\.\d+$/.test(u.hostname);
+      const isAllowedPort = ["5500", "5501", "3000", "5173", "8080", "80", "443", ""].includes(u.port);
+      if (isPrivateOrLocalHost && isAllowedPort) {
         isAllowed = true;
       }
     } catch {}

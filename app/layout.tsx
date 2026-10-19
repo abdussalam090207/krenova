@@ -5,6 +5,7 @@ import { AmbientBackground } from "@/components/layout/AmbientBackground";
 import { IntroSplash } from "@/components/layout/IntroSplash";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { TopLoadingBar } from "@/components/layout/TopLoadingBar";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import "./globals.css";
 
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ThemeProvider>
+          <TopLoadingBar />
           {/* Flag intro ditulis sebelum browser paint — mencegah flash konten */}
           <Script id="intro-flag" strategy="beforeInteractive">{`
             try {
