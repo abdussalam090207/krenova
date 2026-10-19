@@ -122,7 +122,7 @@ export function CatalogFilters({ categories, allFormats, totalItems }: Props) {
             <div className="flex items-center gap-2">
               <ArrowUpDown size={15} className="text-text-3" />
               <span className="text-text-3 text-xs">Urut:</span>
-              <span className="text-white font-semibold">{currentUrutLabel}</span>
+              <span className="text-text font-semibold">{currentUrutLabel}</span>
             </div>
             <ChevronDown
               size={15}
@@ -136,7 +136,7 @@ export function CatalogFilters({ categories, allFormats, totalItems }: Props) {
           {sortOpen && (
             <div
               role="listbox"
-              className="absolute right-0 sm:right-0 left-0 sm:left-auto mt-2 min-w-[230px] p-1.5 rounded-2xl bg-[#090b14]/90 backdrop-blur-2xl border border-white/[0.18] shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.06),inset_0_1px_0_rgba(255,255,255,0.25)] z-50 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
+              className="absolute right-0 sm:right-0 left-0 sm:left-auto mt-2 min-w-[230px] p-1.5 rounded-2xl glass"
             >
               <div className="px-3 py-1.5 text-[11px] font-semibold text-text-3 uppercase tracking-wider">
                 Urutkan Berdasarkan
@@ -160,11 +160,11 @@ export function CatalogFilters({ categories, allFormats, totalItems }: Props) {
                     }`}
                   >
                     <div>
-                      <div className="text-sm font-medium">{o.label}</div>
+                      <div className="text-sm text-text font-medium ">{o.label}</div>
                       <div className="text-[11px] text-text-3">{o.desc}</div>
                     </div>
                     {isSelected && (
-                      <Check size={16} className="text-white mt-0.5 shrink-0" />
+                      <Check size={16} className="text-text mt-0.5 shrink-0" />
                     )}
                   </button>
                 );
@@ -188,7 +188,7 @@ export function CatalogFilters({ categories, allFormats, totalItems }: Props) {
                 onClick={() => update("mode", m.value)}
                 className={`relative flex items-center gap-1.5 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm transition-all duration-300 whitespace-nowrap cursor-pointer ${
                   active
-                    ? "font-semibold text-white bg-gradient-to-b from-white/[0.22] via-white/[0.12] to-white/[0.05] backdrop-blur-md border border-white/30 ,inset_0_1px_2px_rgba(255,255,255,0.4),inset_0_-1px_1px_rgba(0,0,0,0.25)]"
+                    ? "font-semibold text-text glass"
                     : "font-medium text-text-3 hover:text-text hover:bg-white/[0.06] border border-transparent"
                 }`}
               >
