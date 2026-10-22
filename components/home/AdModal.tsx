@@ -135,7 +135,7 @@ export function AdModal() {
             {/* Gambar Iklan add.webp */}
             <div className="relative w-full overflow-hidden flex items-center justify-center bg-black/30">
               <Image
-                src="/add.webp"
+                src="/Krenova Studio.webp"
                 alt="Iklan Promosi KRENOVA STUDIO"
                 width={893}
                 height={1263}
