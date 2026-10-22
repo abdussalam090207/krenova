@@ -1,19 +1,39 @@
+import dynamic from "next/dynamic";
 import { Hero } from "@/components/home/Hero";
-import { ServicesExplorer } from "@/components/home/ServicesExplorer";
-import { AudienceList } from "@/components/home/AudienceList";
-import { FeaturedWork } from "@/components/home/FeaturedWork";
-import { ProcessTimeline } from "@/components/home/ProcessTimeline";
-import { AdModal } from "@/components/home/AdModal";
+
+// [PERF] Komponen di bawah fold — lazy load untuk kurangi initial bundle
+// ServicesExplorer menggunakan motion/react (framer) yang cukup berat
+const ServicesExplorer = dynamic(
+  () => import("@/components/home/ServicesExplorer").then((m) => ({ default: m.ServicesExplorer })),
+  { ssr: true }
+);
+
+// AudienceList dan seterusnya — server component, lazy chunk
+const AudienceList = dynamic(
+  () => import("@/components/home/AudienceList").then((m) => ({ default: m.AudienceList })),
+  { ssr: true }
+);
+
+const FeaturedWork = dynamic(
+  () => import("@/components/home/FeaturedWork").then((m) => ({ default: m.FeaturedWork })),
+  { ssr: true }
+);
+
+const ProcessTimeline = dynamic(
+  () => import("@/components/home/ProcessTimeline").then((m) => ({ default: m.ProcessTimeline })),
+  { ssr: true }
+);
 
 export default function HomePage() {
   return (
     <>
+      {/* Hero di-render langsung (above fold, LCP element) */}
       <Hero />
+      {/* Komponen di bawah fold: lazy chunk, tetap SSR untuk SEO */}
       <ServicesExplorer />
       <AudienceList />
       <FeaturedWork />
       <ProcessTimeline />
-      <AdModal />
     </>
   );
 }

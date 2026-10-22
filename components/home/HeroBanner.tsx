@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 const BANNERS = [
-  { src: "/banner%201.png", alt: "KRENOVA Studio Banner 1" },
-  { src: "/banner%202.png", alt: "KRENOVA Studio Banner 2" },
-  { src: "/banner%203.png", alt: "KRENOVA Studio Banner 3" },
+  { src: "/banner 1.webp", alt: "KRENOVA Studio Banner 1" },
+  { src: "/banner 2.webp", alt: "KRENOVA Studio Banner 2" },
+  { src: "/banner 3.webp", alt: "KRENOVA Studio Banner 3" },
 ];
 
 export function HeroBanner() {

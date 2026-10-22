@@ -132,14 +132,13 @@ export function AdModal() {
               <X size={20} strokeWidth={2.2} />
             </button>
 
-            {/* Gambar Iklan add.png */}
+            {/* Gambar Iklan add.webp */}
             <div className="relative w-full overflow-hidden flex items-center justify-center bg-black/30">
               <Image
-                src="/add.png"
+                src="/add.webp"
                 alt="Iklan Promosi KRENOVA STUDIO"
                 width={893}
                 height={1263}
-                priority
                 className="w-auto h-auto max-h-[82vh] max-w-full object-contain block select-none"
               />
             </div>

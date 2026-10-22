@@ -39,6 +39,16 @@ const CSP_REPORT_ONLY = [
 
 const nextConfig: NextConfig = {
   images: {
+    // [PERF] Format modern: avif (terkecil) → webp (kompatibel luas) → fallback
+    formats: ["image/avif", "image/webp"],
+
+    // [PERF] Breakpoints responsif yang cocok dengan layout site
+    deviceSizes: [390, 640, 768, 1024, 1280, 1536],
+    imageSizes: [48, 64, 128, 256, 384],
+
+    // [PERF] Cache gambar yang sudah dioptimasi selama 60 hari
+    minimumCacheTTL: 60 * 60 * 24 * 60,
+
     remotePatterns: [
       {
         protocol: "https",
@@ -107,6 +117,26 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy",                value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy",             value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
           { key: "Content-Security-Policy-Report-Only", value: CSP_REPORT_ONLY },
+        ],
+      },
+      // [PERF] Static assets: cache agresif 1 tahun (immutable — Next.js hash nama file)
+      {
+        source: "/_next/static/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      // [PERF] File media di /public: cache 7 hari dengan revalidasi
+      {
+        source: "/(.*\\.(?:webp|avif|png|jpg|jpeg|svg|gif|ico|woff2|woff|ttf))",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=86400",
+          },
         ],
       },
       // Halaman pesanan: privat, tidak boleh diindeks, tidak bocor via Referer
