@@ -1,4 +1,4 @@
-// lib/server/email.ts — Kirim email notifikasi ganda via Resend
+// lib/server/email.ts — Kirim email notifikasi ganda via Resend (Atomic Claim & Anti-Spam)
 import "server-only";
 import { Resend } from "resend";
 import { env } from "./env";
@@ -16,6 +16,9 @@ import { formatWaktu } from "@/lib/catalog/format";
 import type { OrderRow } from "./orders";
 
 const resend = new Resend(env.RESEND_API_KEY);
+
+// In-memory lock per order ID untuk mencegah konkurensi di runtime yang sama
+const activeOrderLocks = new Set<string>();
 
 /**
  * Kirim email tunggal via Resend dengan penanganan try-catch lengkap.
@@ -48,30 +51,53 @@ export async function sendEmail(p: {
 
 /**
  * Kirim email notifikasi ganda (ke Pembeli dan Admin) setelah pesanan lunas.
- * Idempoten: lewati bila email_buyer_sent_at / email_admin_sent_at sudah terisi.
- * Kegagalan email tidak akan membatalkan status lunas transaksi.
+ * Menggunakan mekanisme ATOMIC CLAIM (Compare-and-Swap di PostgreSQL) + Mutex Lock:
+ * Dijamin 100% IDEMPOTEN & BEBAS SPAM meskipun webhook dan polling tiba bersamaan.
  */
 export async function onOrderPaid(order: OrderRow): Promise<void> {
+  const orderId = order.id;
+
+  // 1. Guard in-memory: cegah eksekusi paralel pada proses/instance yang sama
+  if (activeOrderLocks.has(orderId)) {
+    console.log(`[onOrderPaid] Skip order ${order.order_code}: proses email sedang berjalan di memori.`);
+    return;
+  }
+
+  activeOrderLocks.add(orderId);
+
   try {
     const paidAt = formatWaktu(order.paid_at ?? new Date().toISOString());
     const token = orderToken(order.order_code, order.token_version);
     const link = orderLink(order.order_code, order.token_version);
 
-    // Ambil data status terbaru dari DB untuk mengantisipasi concurrent webhook calls
-    const { data: freshOrder } = await supabaseAdmin
-      .from("catalog_orders")
-      .select("email_buyer_sent_at, email_admin_sent_at")
-      .eq("id", order.id)
-      .single();
+    const nowIso = new Date().toISOString();
 
-    const buyerAlreadySent = Boolean(freshOrder?.email_buyer_sent_at || order.email_buyer_sent_at);
-    const adminAlreadySent = Boolean(freshOrder?.email_admin_sent_at || order.email_admin_sent_at);
-
-    if (buyerAlreadySent && adminAlreadySent) return;
-
-    // ── 1. Task Email ke Pembeli ─────────────────────────────────────
+    // ── 1. Task Email ke Pembeli (Atomic Claim) ──────────────────────────
     const sendBuyer = async () => {
-      if (buyerAlreadySent) return;
+      // ATOMIC CLAIM: Update database HANYA jika email_buyer_sent_at masih NULL.
+      // Database PostgreSQL menjamin hanya 1 request yang berhasil mendapatkan row ini!
+      const { data: claimedBuyer, error: claimBuyerErr } = await supabaseAdmin
+        .from("catalog_orders")
+        .update({
+          email_buyer_sent_at: nowIso,
+          email_error: null,
+        })
+        .eq("id", orderId)
+        .is("email_buyer_sent_at", null)
+        .select("id")
+        .maybeSingle();
+
+      if (claimBuyerErr) {
+        console.error(`[onOrderPaid] Gagal atomic claim buyer email (${order.order_code}):`, claimBuyerErr);
+        return;
+      }
+
+      // Jika null, berarti proses/request lain sudah mengklaim atau sudah mengirim email ini
+      if (!claimedBuyer) {
+        console.log(`[onOrderPaid] Buyer email sudah pernah diklaim/terkirim untuk pesanan ${order.order_code}. Skip.`);
+        return;
+      }
+
       try {
         const deliverables = await getDeliverables(order);
 
@@ -110,36 +136,63 @@ export async function onOrderPaid(order: OrderRow): Promise<void> {
           }),
         });
 
-        await supabaseAdmin
-          .from("catalog_orders")
-          .update(
-            result.ok
-              ? { email_buyer_sent_at: new Date().toISOString(), email_error: null }
-              : { email_error: `[Buyer Email] ${String(result.error ?? "").slice(0, 250)}` },
-          )
-          .eq("id", order.id);
-
         if (!result.ok) {
+          // Jika pengiriman gagal, lepas atomic claim agar bisa dicoba ulang (reconcile / manual)
+          await supabaseAdmin
+            .from("catalog_orders")
+            .update({
+              email_buyer_sent_at: null,
+              email_error: `[Buyer Email] ${String(result.error ?? "").slice(0, 250)}`,
+            })
+            .eq("id", orderId);
+
           try {
             await supabaseAdmin.from("catalog_notifications").insert({
               type: "email_failed",
-              order_id: order.id,
+              order_id: orderId,
               title: "Email pembeli gagal dikirim",
               body: `Pesanan #${order.order_code} (${order.buyer_email}): ${String(result.error ?? "").slice(0, 200)}`,
               meta: { order_code: order.order_code, buyer_email: order.buyer_email, error: result.error },
             });
-          } catch {
-            // fire-and-forget
-          }
+          } catch {}
         }
       } catch (err) {
+        // Lepas claim jika terjadi exception fatal
+        await supabaseAdmin
+          .from("catalog_orders")
+          .update({
+            email_buyer_sent_at: null,
+            email_error: `[Buyer Email Exception] ${err instanceof Error ? err.message : String(err)}`,
+          })
+          .eq("id", orderId);
+
         console.error(`[onOrderPaid Buyer Exception] Pesanan #${order.order_code}:`, err);
       }
     };
 
-    // ── 2. Task Email ke Admin (krenovastudio26@gmail.com) ────────────
+    // ── 2. Task Email ke Admin (Atomic Claim) ─────────────────────────────
     const sendAdmin = async () => {
-      if (adminAlreadySent) return;
+      // ATOMIC CLAIM: Update database HANYA jika email_admin_sent_at masih NULL.
+      const { data: claimedAdmin, error: claimAdminErr } = await supabaseAdmin
+        .from("catalog_orders")
+        .update({
+          email_admin_sent_at: nowIso,
+        })
+        .eq("id", orderId)
+        .is("email_admin_sent_at", null)
+        .select("id")
+        .maybeSingle();
+
+      if (claimAdminErr) {
+        console.error(`[onOrderPaid] Gagal atomic claim admin email (${order.order_code}):`, claimAdminErr);
+        return;
+      }
+
+      if (!claimedAdmin) {
+        console.log(`[onOrderPaid] Admin email sudah pernah diklaim/terkirim untuk pesanan ${order.order_code}. Skip.`);
+        return;
+      }
+
       try {
         const adminSubject = `[NEW ORDER] #${order.order_code} Lunas!`;
 
@@ -166,23 +219,31 @@ export async function onOrderPaid(order: OrderRow): Promise<void> {
           }),
         });
 
-        if (result.ok) {
+        if (!result.ok) {
+          // Lepas claim agar bisa retry bila gagal kirim
           await supabaseAdmin
             .from("catalog_orders")
-            .update({ email_admin_sent_at: new Date().toISOString() })
-            .eq("id", order.id);
-        } else {
+            .update({ email_admin_sent_at: null })
+            .eq("id", orderId);
+
           console.error(`[Email Admin Failed] Pesanan #${order.order_code}: ${result.error}`);
         }
       } catch (err) {
+        await supabaseAdmin
+          .from("catalog_orders")
+          .update({ email_admin_sent_at: null })
+          .eq("id", orderId);
+
         console.error(`[onOrderPaid Admin Exception] Pesanan #${order.order_code}:`, err);
       }
     };
 
-    // Eksekusi kedua email secara paralel agar admin email tidak tertunda atau terputus
+    // Jalankan kedua pengiriman
     await Promise.allSettled([sendBuyer(), sendAdmin()]);
   } catch (outerErr) {
     console.error(`[onOrderPaid General Exception] Pesanan #${order.order_code}:`, outerErr);
+  } finally {
+    // Selalu hapus lock in-memory saat selesai
+    activeOrderLocks.delete(orderId);
   }
 }
-
