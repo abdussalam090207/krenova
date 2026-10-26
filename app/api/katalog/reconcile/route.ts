@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
     return json({ status: order.status });
   }
 
+  // Jika waktu pembayaran sudah habis (expired):
+  if (order.expires_at && new Date(order.expires_at).getTime() <= Date.now()) {
+    const { expireOrder } = await import("@/lib/server/orders");
+    await expireOrder(order);
+    return json({ status: "expired" });
+  }
+
   try {
     // Gunakan invoice_number aktif (bisa ada suffix metode pembayaran)
     const targetInvoice =

@@ -4,6 +4,7 @@ import { supabaseAdmin } from "./supabase-admin";
 import {
   chargeDoku,
   getDokuStatus,
+  cancelDokuOrder,
   isDokuSandbox,
   type DokuPaymentChannel,
 } from "./doku";
@@ -188,6 +189,7 @@ function mapDokuStatus(s: string): InternalStatus {
     case "SETTLEMENT": return "paid";
     case "PENDING":    return "pending";
     case "EXPIRED":    return "expired";
+    case "CANCEL":
     case "CANCELED":
     case "CANCELLED":  return "canceled";
     case "FAILED":
@@ -326,7 +328,7 @@ export async function countProductOrders(productId: string): Promise<number> {
 
 /**
  * Batalkan pesanan secara eksplisit (navigasi keluar / tombol batal).
- * DOKU tidak memiliki cancel API di sandbox; cukup update status DB saja.
+ * Membatalkan transaksi di gateway DOKU (status jadi CANCEL) dan di database Supabase (status jadi canceled).
  */
 export async function cancelOrder(
   code: string,
@@ -354,7 +356,25 @@ export async function cancelOrder(
     return { ok: true, status: "canceled", message: "Pesanan sudah dibatalkan sebelumnya." };
   }
 
-  // Update status di Supabase menjadi 'canceled'
+  // 1. Batalkan transaksi di DOKU agar di DOKU statusnya menjadi CANCEL (bukan pending)
+  const invoicesToCancel = new Set<string>();
+  invoicesToCancel.add(order.order_code);
+  if (order.gateway_transaction_id) {
+    invoicesToCancel.add(order.gateway_transaction_id);
+  }
+  if (order.gateway_payment_type && order.gateway_payment_type !== "qris") {
+    invoicesToCancel.add(`${order.order_code}-${order.gateway_payment_type}`);
+  }
+
+  try {
+    await Promise.allSettled(
+      Array.from(invoicesToCancel).map((inv) => cancelDokuOrder(inv))
+    );
+  } catch (err) {
+    console.error("[cancelOrder] Error saat membatalkan di DOKU:", err);
+  }
+
+  // 2. Update status di Supabase menjadi 'canceled'
   const { data: updated, error } = await supabaseAdmin
     .from("catalog_orders")
     .update({
@@ -372,6 +392,48 @@ export async function cancelOrder(
   }
 
   return { ok: true, status: "canceled", message: "Pesanan berhasil dibatalkan." };
+}
+
+/**
+ * Tandai pesanan sebagai expired saat waktu pembayaran habis.
+ * Membatalkan transaksi di DOKU dan mengubah status DB menjadi 'expired'.
+ */
+export async function expireOrder(
+  order: OrderRow,
+): Promise<{ ok: boolean; status: string }> {
+  if (order.status !== "pending") {
+    return { ok: true, status: order.status };
+  }
+
+  // Batalkan di DOKU agar tidak menggantung pending
+  const invoicesToCancel = new Set<string>();
+  invoicesToCancel.add(order.order_code);
+  if (order.gateway_transaction_id) invoicesToCancel.add(order.gateway_transaction_id);
+  if (order.gateway_payment_type && order.gateway_payment_type !== "qris") {
+    invoicesToCancel.add(`${order.order_code}-${order.gateway_payment_type}`);
+  }
+
+  try {
+    await Promise.allSettled(
+      Array.from(invoicesToCancel).map((inv) => cancelDokuOrder(inv))
+    );
+  } catch (err) {
+    console.error("[expireOrder] Error saat membatalkan di DOKU:", err);
+  }
+
+  const { data: updated } = await supabaseAdmin
+    .from("catalog_orders")
+    .update({
+      status:         "expired",
+      gateway_status: "EXPIRED",
+      updated_at:     new Date().toISOString(),
+    })
+    .eq("id", order.id)
+    .eq("status", "pending")
+    .select()
+    .single<OrderRow>();
+
+  return { ok: true, status: updated ? "expired" : order.status };
 }
 
 export interface SwitchPaymentResult {
@@ -539,5 +601,5 @@ function dokuResultToPaymentDetails(
   };
 }
 
-// Re-export getDokuStatus agar dipakai oleh orders/check route
-export { getDokuStatus, isDokuSandbox };
+// Re-export DOKU helpers agar dipakai oleh route lain
+export { getDokuStatus, isDokuSandbox, cancelDokuOrder };

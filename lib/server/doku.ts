@@ -435,6 +435,42 @@ export async function getDokuStatus(invoiceNumber: string): Promise<DokuStatusRe
   }
 }
 
+// ─── Batalkan Pesanan di DOKU (Cancel Order API) ──────────────────────────
+
+export async function cancelDokuOrder(invoiceNumber: string): Promise<{
+  ok: boolean;
+  status?: number;
+  data?: Record<string, unknown>;
+}> {
+  if (!CLIENT_ID || !SECRET_KEY) {
+    return { ok: true, data: { simulated: true, note: "No credentials, local cancel" } };
+  }
+
+  try {
+    const path = "/checkout/v3/cancellations";
+    const body = {
+      order: {
+        invoice_number: invoiceNumber,
+      },
+    };
+
+    console.log(`[DOKU] Cancel Order: POST ${path} (invoice: ${invoiceNumber})`);
+    const res = await callDoku(path, body);
+    const isSuccess = res.status >= 200 && res.status < 300;
+    return {
+      ok: isSuccess,
+      status: res.status,
+      data: res.data,
+    };
+  } catch (err) {
+    console.warn(`[DOKU] Gagal membatalkan transaksi ${invoiceNumber}:`, err);
+    return {
+      ok: false,
+      data: { error: String(err) },
+    };
+  }
+}
+
 // ─── Ekstraksi Field dari Respons DOKU ────────────────────────────────────
 
 function extractQrString(raw: Record<string, unknown>): string | null {

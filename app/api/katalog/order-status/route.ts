@@ -23,6 +23,18 @@ export async function GET(req: NextRequest) {
   const order = await loadOrder(code, token);
   if (!order) return json({ error: "not_found" }, 404);
 
+  // Jika pesanan masih pending tapi waktu pembayaran sudah habis (expired):
+  if (
+    order.status === "pending" &&
+    order.expires_at &&
+    new Date(order.expires_at).getTime() <= Date.now()
+  ) {
+    import("@/lib/server/orders")
+      .then(({ expireOrder }) => expireOrder(order))
+      .catch((err) => console.error("[order-status] expireOrder error:", err));
+    return json({ status: "expired", expiresAt: order.expires_at });
+  }
+
   // Jika pesanan sudah paid namun email belum terkirim, picu pengiriman SEKALI saja
   if (
     order.status === "paid" &&

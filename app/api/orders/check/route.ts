@@ -33,6 +33,22 @@ async function checkAndReconcileOrder(orderCode: string, token?: string | null) 
 
   // Jika pesanan masih pending, verifikasi langsung ke DOKU API
   if (order.status === "pending") {
+    // Jika waktu pembayaran sudah habis
+    if (order.expires_at && new Date(order.expires_at).getTime() <= Date.now()) {
+      const { expireOrder } = await import("@/lib/server/orders");
+      await expireOrder(order);
+      return {
+        ok: true,
+        order_code:    order.order_code,
+        product_title: order.product_title,
+        status:        "expired",
+        paid:          false,
+        amount_idr:    order.amount_idr,
+        buyer_email:   order.buyer_email ? maskEmail(order.buyer_email) : undefined,
+        message:       "Waktu pembayaran telah habis (expired).",
+      };
+    }
+
     try {
       // Gunakan invoice number yang aktif (bisa ada suffix metode pembayaran)
       const targetInvoice =
