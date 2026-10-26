@@ -21,8 +21,8 @@ export const env = {
   MIDTRANS_SERVER_KEY:   process.env.MIDTRANS_SERVER_KEY ?? "",
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === "true",
   // DOKU Direct API
-  DOKU_CLIENT_ID:        requireEnv("DOKU_CLIENT_ID"),
-  DOKU_SECRET_KEY:       requireEnv("DOKU_SECRET_KEY"),
+  DOKU_CLIENT_ID:        process.env.DOKU_CLIENT_ID ?? "",
+  DOKU_SECRET_KEY:       process.env.DOKU_SECRET_KEY ?? "",
   DOKU_BASE_URL:         process.env.DOKU_BASE_URL ?? "https://api-sandbox.doku.com",
   DOKU_IS_PRODUCTION:    process.env.DOKU_IS_PRODUCTION === "true",
   RESEND_API_KEY:        requireEnv("RESEND_API_KEY"),
