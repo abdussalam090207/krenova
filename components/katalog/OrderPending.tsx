@@ -358,15 +358,12 @@ export function OrderPending({
   );
   const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${waMsg}`;
 
-  // Simulator URL
-  let simulatorUrl = "https://simulator.sandbox.midtrans.com/qris/index";
-  let simulatorLabel = "Simulator QRIS Midtrans";
+  // Simulator URL untuk Sandbox DOKU
+  let simulatorUrl = "https://sandbox.doku.com";
+  let simulatorLabel = "Simulator Pembayaran DOKU";
   if (isVA || isMandiri) {
-    simulatorUrl = "https://simulator.sandbox.midtrans.com/openapi/va/index";
-    simulatorLabel = "Simulator Virtual Account Midtrans";
-  } else if (isOtc) {
-    simulatorUrl = "https://simulator.sandbox.midtrans.com/cstore/index";
-    simulatorLabel = "Simulator Kasir Retail Midtrans";
+    simulatorUrl = "https://sandbox.doku.com";
+    simulatorLabel = "Simulator Virtual Account DOKU";
   }
 
   return (
@@ -423,6 +420,19 @@ export function OrderPending({
               <p className="text-xs text-text-2 leading-relaxed max-w-xs mx-auto">
                 Pindai QR ini dengan GoPay, OVO, DANA, ShopeePay, BCA, Livin&apos;, atau aplikasi perbankan apa saja.
               </p>
+
+              {currentDetails?.qrString?.startsWith("http") && (
+                <div className="pt-1">
+                  <a
+                    href={currentDetails.qrString}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold text-white bg-blue/80 hover:bg-blue border border-white/20 transition-all shadow-lg shadow-blue/25"
+                  >
+                    Buka Halaman Pembayaran DOKU →
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-8 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col items-center justify-center gap-3 relative z-10 animate-fade-in">

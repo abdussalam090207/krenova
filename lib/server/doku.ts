@@ -347,40 +347,40 @@ async function chargeVA(p: DokuChargeParams, bankCode: string): Promise<DokuChar
   };
 }
 
-// â”€â”€â”€ Charge QRIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Charge QRIS ──────────────────────────────────────────────────────────
 
 async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
   const fallbackExpiry = new Date(Date.now() + p.expiryMinutes * 60_000)
     .toISOString()
     .replace(/\.\d{3}Z$/, "Z");
 
-  // Di DOKU Sandbox, QRIS channel seringkali belum aktif di profil merchant default
-  // Kita coba dulu via endpoint SNAP adapter atau checkout
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/+$/, "");
+  const baseSite = siteUrl && !siteUrl.includes("localhost") && !siteUrl.includes("127.0.0.1")
+    ? siteUrl
+    : "https://krenovas.my.id";
+  const callbackUrl = `${baseSite}/katalog/pesanan/${p.orderCode}`;
+
+  // Payload standar DOKU Checkout (Jokul API) untuk QRIS
   const body = {
     order: {
       invoice_number: p.orderCode,
       amount:         p.amountIdr,
       currency:       "IDR",
+      callback_url:   callbackUrl,
     },
     payment: {
-      payment_due_date:  p.expiryMinutes,
-      // Memberitahu DOKU ke mana mengirim webhook notifikasi pembayaran
-      notification_url:  WEBHOOK_URL,
+      payment_due_date:     p.expiryMinutes,
+      payment_method_types: ["QRIS"],
     },
     customer: {
       name:  sanitizeName(p.buyerName),
       email: p.buyerEmail.trim().toLowerCase(),
     },
-    // additional_info sebagai fallback untuk beberapa versi endpoint DOKU
-    additional_info: {
-      callback_url: WEBHOOK_URL,
-    },
   };
 
-  
-
+  let res: { status: number; data: Record<string, unknown> } | null = null;
   try {
-    const res = await callDoku("/checkout/v1/payment", body);
+    res = await callDoku("/checkout/v1/payment", body);
     const qrString = extractQrString(res.data);
     if ((res.status === 200 || res.status === 201) && qrString) {
       return {
@@ -393,13 +393,18 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
         raw:           res.data,
       };
     }
+    console.warn(`[DOKU] Charge QRIS checkout response (HTTP ${res?.status}):`, JSON.stringify(res?.data ?? {}).slice(0, 300));
   } catch (err) {
-    console.warn("[DOKU] Charge QRIS direct attempt error:", err);
+    console.warn("[DOKU] Charge QRIS attempt error:", err);
   }
 
-  // PRODUCTION: tidak ada fallback simulasi â€” gagal dengan pesan jelas
+  // PRODUCTION: jika channel QRIS gagal atau belum aktif, kembalikan failResult dengan log jelas
   if (IS_PROD) {
-    return failResult(p.orderCode, "Channel QRIS belum diaktifkan di akun DOKU Production Anda. Pastikan QRIS aktif di merchant dashboard DOKU.");
+    const errorDetail = res?.data ? JSON.stringify(res.data).slice(0, 200) : "Network/gateway error";
+    return failResult(
+      p.orderCode,
+      `Channel QRIS belum aktif di akun DOKU Production (HTTP ${res?.status ?? "ERR"}): ${errorDetail}`,
+    );
   }
 
   // SANDBOX ONLY: Buat mock QRIS EMV string agar pengujian lokal & simulasi lancar
@@ -526,14 +531,16 @@ export async function cancelDokuOrder(invoiceNumber: string): Promise<{
   }
 }
 
-// â”€â”€â”€ Ekstraksi Field dari Respons DOKU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Ekstraksi Field dari Respons DOKU ────────────────────────────────────
 
 function extractQrString(raw: Record<string, unknown>): string | null {
-  const payment    = raw.payment    as Record<string, unknown> | undefined;
-  const payData    = raw.payment_data as Record<string, unknown> | undefined;
-  const qrResponse = raw.qr_response as Record<string, unknown> | undefined;
+  const resp       = raw.response   as Record<string, unknown> | undefined;
+  const payment    = (resp?.payment ?? raw.payment) as Record<string, unknown> | undefined;
+  const payData    = (resp?.payment_data ?? raw.payment_data) as Record<string, unknown> | undefined;
+  const qrResponse = (resp?.qr_response ?? raw.qr_response) as Record<string, unknown> | undefined;
 
   const candidates = [
+    // Direct QR string (EMVCo)
     payment?.qr_string,
     payment?.qr_code,
     payData?.qr_code,
@@ -543,6 +550,13 @@ function extractQrString(raw: Record<string, unknown>): string | null {
     raw.qr_code,
     raw.qrContent,
     raw.qr_content,
+    resp?.qr_content,
+    resp?.qrContent,
+    // Checkout payment URL (DOKU Checkout URL)
+    payment?.url,
+    payData?.url,
+    raw.url,
+    resp?.url,
   ];
 
   for (const c of candidates) {
@@ -553,8 +567,9 @@ function extractQrString(raw: Record<string, unknown>): string | null {
 }
 
 function extractVaNumber(raw: Record<string, unknown>): string | null {
-  const vai     = raw.virtual_account_info as Record<string, unknown> | undefined;
-  const payData = raw.payment_data         as Record<string, unknown> | undefined;
+  const resp    = raw.response as Record<string, unknown> | undefined;
+  const vai     = (resp?.virtual_account_info ?? raw.virtual_account_info) as Record<string, unknown> | undefined;
+  const payData = (resp?.payment_data         ?? raw.payment_data)         as Record<string, unknown> | undefined;
 
   const candidates = [
     vai?.virtual_account_number,
@@ -572,8 +587,9 @@ function extractVaNumber(raw: Record<string, unknown>): string | null {
 }
 
 function extractExpiredDate(raw: Record<string, unknown>, fallback: string): string {
-  const vai     = raw.virtual_account_info as Record<string, unknown> | undefined;
-  const payment = raw.payment              as Record<string, unknown> | undefined;
+  const resp    = raw.response as Record<string, unknown> | undefined;
+  const vai     = (resp?.virtual_account_info ?? raw.virtual_account_info) as Record<string, unknown> | undefined;
+  const payment = (resp?.payment              ?? raw.payment)              as Record<string, unknown> | undefined;
 
   const candidates = [
     vai?.expired_date_utc,
@@ -581,10 +597,25 @@ function extractExpiredDate(raw: Record<string, unknown>, fallback: string): str
     payment?.expired_datetime,
     payment?.expired_date,
     raw.expired_date,
+    resp?.expired_date,
   ];
 
   for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c.trim();
+    if (typeof c === "string" && c.trim()) {
+      const val = c.trim();
+      // Handle DOKU YYYYMMDDHHmmss format (14 digits) e.g. 20261027153000
+      if (/^\d{14}$/.test(val)) {
+        const y = val.slice(0, 4);
+        const m = val.slice(4, 6);
+        const d = val.slice(6, 8);
+        const h = val.slice(8, 10);
+        const min = val.slice(10, 12);
+        const s = val.slice(12, 14);
+        const dt = new Date(`${y}-${m}-${d}T${h}:${min}:${s}+07:00`);
+        if (!Number.isNaN(dt.getTime())) return dt.toISOString();
+      }
+      return val;
+    }
   }
   return fallback;
 }

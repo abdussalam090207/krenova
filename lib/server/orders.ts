@@ -102,8 +102,8 @@ export async function createOrder(input: CreateOrderInput): Promise<{
 
   // 4. Charge Payment ke DOKU Direct API (hanya paid)
   if (!isFree) {
-    const method: PaymentMethod = input.paymentMethod || "qris";
-    const dokuChannel = paymentMethodToDokuChannel(method);
+    let activeMethod: PaymentMethod = input.paymentMethod || "qris";
+    const dokuChannel = paymentMethodToDokuChannel(activeMethod);
 
     let chargeResult: Awaited<ReturnType<typeof chargeDoku>>;
     try {
@@ -116,7 +116,8 @@ export async function createOrder(input: CreateOrderInput): Promise<{
         expiryMinutes: catalogConfig.paymentExpiryMinutes,
         channel:       dokuChannel,
       });
-    } catch {
+    } catch (err) {
+      console.error("[createOrder] Exception saat chargeDoku:", err);
       await supabaseAdmin
         .from("catalog_orders")
         .update({ status: "failed", gateway_status: "charge_error" })
@@ -124,23 +125,59 @@ export async function createOrder(input: CreateOrderInput): Promise<{
       throw Object.assign(new Error("Pembayaran sedang tidak tersedia."), { status: 502 });
     }
 
-    if (!chargeResult.ok) {
-      await supabaseAdmin
-        .from("catalog_orders")
-        .update({ status: "failed", gateway_status: "charge_failed" })
-        .eq("id", order.id);
-      throw Object.assign(new Error("Pembayaran sedang tidak tersedia."), { status: 502 });
+    // Jika channel QRIS gagal (misalnya akun DOKU Production baru belum di-approve channel QRIS-nya oleh BI/ASPI),
+    // otomatis fallback ke BCA Virtual Account agar checkout user tetap berhasil dan tidak terputus!
+    if (!chargeResult.ok && dokuChannel === "QRIS") {
+      console.warn(`[createOrder] Charge QRIS gagal (${chargeResult.errorMessage}). Mencoba fallback ke BCA Virtual Account...`);
+      try {
+        const vaFallback = await chargeDoku({
+          orderCode:     order.order_code,
+          amountIdr,
+          buyerName:     input.name,
+          buyerEmail:    input.email,
+          productTitle:  product.title,
+          expiryMinutes: catalogConfig.paymentExpiryMinutes,
+          channel:       "VIRTUAL_ACCOUNT_BCA",
+        });
+        if (vaFallback.ok) {
+          chargeResult = vaFallback;
+          activeMethod = "bca_va";
+          console.log(`[createOrder] Berhasil fallback ke BCA VA (${vaFallback.vaNumber}) untuk ${order.order_code}`);
+        } else {
+          console.error("[createOrder] Fallback BCA VA juga gagal:", vaFallback.errorMessage);
+        }
+      } catch (vaErr) {
+        console.error("[createOrder] Exception saat fallback BCA VA:", vaErr);
+      }
     }
 
-    const paymentDetails = dokuResultToPaymentDetails(chargeResult, method);
-    const expiresAt = chargeResult.expiredDate
-      ? new Date(chargeResult.expiredDate).toISOString()
-      : new Date(Date.now() + catalogConfig.paymentExpiryMinutes * 60_000).toISOString();
+    if (!chargeResult.ok) {
+      console.error(`[createOrder] chargeDoku gagal untuk pesanan ${order.order_code}:`, chargeResult.errorMessage, chargeResult.raw);
+      const errSnippet = (chargeResult.errorMessage || "unknown").slice(0, 100);
+      await supabaseAdmin
+        .from("catalog_orders")
+        .update({ status: "failed", gateway_status: `charge_failed: ${errSnippet}` })
+        .eq("id", order.id);
+      throw Object.assign(new Error(chargeResult.errorMessage || "Pembayaran sedang tidak tersedia."), { status: 502 });
+    }
+
+    const paymentDetails = dokuResultToPaymentDetails(chargeResult, activeMethod);
+    let expiresAt: string;
+    try {
+      expiresAt = chargeResult.expiredDate
+        ? new Date(chargeResult.expiredDate).toISOString()
+        : new Date(Date.now() + catalogConfig.paymentExpiryMinutes * 60_000).toISOString();
+      if (expiresAt === "Invalid Date" || Number.isNaN(new Date(expiresAt).getTime())) {
+        expiresAt = new Date(Date.now() + catalogConfig.paymentExpiryMinutes * 60_000).toISOString();
+      }
+    } catch {
+      expiresAt = new Date(Date.now() + catalogConfig.paymentExpiryMinutes * 60_000).toISOString();
+    }
 
     const qrOrPayload = JSON.stringify({
-      activeMethod:  method,
+      activeMethod:  activeMethod,
       activeDetails: paymentDetails,
-      methods:       { [method]: paymentDetails },
+      methods:       { [activeMethod]: paymentDetails },
     });
 
     await supabaseAdmin
@@ -148,7 +185,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{
       .update({
         gateway:                "doku",
         gateway_transaction_id: chargeResult.invoiceNumber,
-        gateway_payment_type:   method,
+        gateway_payment_type:   activeMethod,
         gateway_status:         "pending",
         qr_string:              qrOrPayload,
         expires_at:             expiresAt,

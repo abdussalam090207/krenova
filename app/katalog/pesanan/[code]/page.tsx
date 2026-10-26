@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { ChevronLeft } from "lucide-react";
-import { loadOrder } from "@/lib/server/orders";
+import { loadOrder, isDokuSandbox } from "@/lib/server/orders";
 import { getDeliverables } from "@/lib/server/delivery";
 import { supabaseAdmin } from "@/lib/server/supabase-admin";
 import { publicMediaUrl } from "@/lib/catalog/queries";
@@ -95,7 +95,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
       }
     : null;
 
-  const isSandbox = process.env.MIDTRANS_IS_PRODUCTION !== "true";
+  const isSandbox = isDokuSandbox;
   const waSupport = catalogConfig.supportWhatsapp;
   const waMsg     = encodeURIComponent(`Halo KRENOVA STUDIO, saya butuh bantuan untuk pesanan ${order.order_code} (${order.product_title}).`);
   const waUrl     = `https://wa.me/${waSupport}?text=${waMsg}`;
