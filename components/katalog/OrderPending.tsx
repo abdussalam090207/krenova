@@ -1,5 +1,5 @@
 "use client";
-// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + DOKU
+// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + Auto-Cancel + Midtrans Watermark
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -32,12 +32,14 @@ interface ReconcileFeedback {
 }
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: "qris",         label: "QRIS & E-Wallet" },
-  { value: "bca_va",       label: "BCA Virtual Account" },
-  { value: "mandiri_bill", label: "Mandiri Virtual Account" },
-  { value: "bni_va",       label: "BNI Virtual Account" },
-  { value: "bri_va",       label: "BRI Virtual Account" },
-  { value: "permata_va",   label: "Permata Virtual Account" },
+  { value: "qris", label: "QRIS & E-Wallet" },
+  { value: "bca_va", label: "BCA Virtual Account" },
+  { value: "mandiri_bill", label: "Mandiri Bill" },
+  { value: "bni_va", label: "BNI Virtual Account" },
+  { value: "bri_va", label: "BRI Virtual Account" },
+  { value: "permata_va", label: "Permata Virtual Account" },
+  { value: "indomaret", label: "Indomaret" },
+  { value: "alfamart", label: "Alfamart" },
 ];
 
 export function OrderPending({
@@ -178,8 +180,33 @@ export function OrderPending({
     };
   }, [checkStatus, expiresAt]);
 
-  // Catatan: Pembatalan pesanan dilakukan secara eksplisit melalui OrderBackButton (dengan konfirmasi dialog).
-  // Menghindari auto-cancel saat reload halaman atau saat pembeli berpindah ke aplikasi m-banking di smartphone.
+  // Auto-cancel saat user menutup tab, undo page browser, atau meninggalkan halaman (beforeunload, pagehide, popstate)
+  useEffect(() => {
+    const handleUnload = () => {
+      if (!beaconActiveRef.current || stoppedRef.current) return;
+      const payload = JSON.stringify({ code: orderCode, t: token });
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon("/api/orders/cancel", blob);
+      } else {
+        fetch("/api/orders/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        });
+      }
+    };
+
+    // Auto-cancel saat user menutup tab / navigasi keluar
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("popstate", handleUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("popstate", handleUnload);
+    };
+  }, [orderCode, token]);
 
   // Ganti metode pembayaran dinamis dari dropdown Liquid Glass di bawah
   async function handleSwitchPayment(newMethod: PaymentMethod) {
@@ -273,7 +300,7 @@ export function OrderPending({
         setFeedback({
           type: "pending",
           message: isSandbox
-            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator DOKU sandbox lalu klik cek kembali."
+            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator Midtrans lalu klik cek kembali."
             : "Pembayaran belum terdeteksi. Silakan selesaikan pembayaran sesuai instruksi di bawah, lalu klik cek kembali.",
         });
         setCooldown(5);
@@ -331,12 +358,15 @@ export function OrderPending({
   );
   const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${waMsg}`;
 
-  // Simulator URL (DOKU Sandbox)
-  let simulatorUrl  = "https://sandbox.doku.com/simulator/qris";
-  let simulatorLabel = "Simulator QRIS DOKU";
+  // Simulator URL
+  let simulatorUrl = "https://simulator.sandbox.midtrans.com/qris/index";
+  let simulatorLabel = "Simulator QRIS Midtrans";
   if (isVA || isMandiri) {
-    simulatorUrl  = "https://sandbox.doku.com/simulator/va";
-    simulatorLabel = "Simulator Virtual Account DOKU";
+    simulatorUrl = "https://simulator.sandbox.midtrans.com/openapi/va/index";
+    simulatorLabel = "Simulator Virtual Account Midtrans";
+  } else if (isOtc) {
+    simulatorUrl = "https://simulator.sandbox.midtrans.com/cstore/index";
+    simulatorLabel = "Simulator Kasir Retail Midtrans";
   }
 
   return (
@@ -594,8 +624,8 @@ export function OrderPending({
                         handleSwitchPayment(opt.value);
                       }}
                       className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs md:text-sm transition-all flex items-center justify-between cursor-pointer ${isSelected
-                          ? "bg-white/[0.12] text-white font-semibold border border-white/20 shadow-sm"
-                          : "text-text-2 hover:text-white hover:bg-white/[0.06]"
+                        ? "bg-white/[0.12] text-white font-semibold border border-white/20 shadow-sm"
+                        : "text-text-2 hover:text-white hover:bg-white/[0.06]"
                         }`}
                     >
                       <span>{opt.label}</span>
@@ -662,12 +692,12 @@ export function OrderPending({
         {feedback && (
           <div
             className={`p-3 rounded-2xl text-xs text-left transition-all flex items-start gap-2.5 relative z-10 animate-fade-in ${feedback.type === "success"
-                ? "bg-emerald-500/15 border border-emerald-500/35 text-emerald-300"
-                : feedback.type === "pending"
-                  ? "bg-amber-500/15 border border-amber-500/35 text-amber-200"
-                  : feedback.type === "info"
-                    ? "bg-blue/15 border border-blue/35 text-blue-200"
-                    : "bg-rose-500/15 border border-rose-500/35 text-rose-300"
+              ? "bg-emerald-500/15 border border-emerald-500/35 text-emerald-300"
+              : feedback.type === "pending"
+                ? "bg-amber-500/15 border border-amber-500/35 text-amber-200"
+                : feedback.type === "info"
+                  ? "bg-blue/15 border border-blue/35 text-blue-200"
+                  : "bg-rose-500/15 border border-rose-500/35 text-rose-300"
               }`}
           >
             <div className="shrink-0 mt-0.5">
@@ -680,20 +710,19 @@ export function OrderPending({
           </div>
         )}
 
-        {/* ── WATERMARK: POWERED BY DOKU (Liquid Glass Aesthetic) ── */}
+        {/* ── WATERMARK: POWERED BY MIDTRANS (Liquid Glass Aesthetic) ── */}
         <div className="pt-4 border-t border-white/[0.08] relative z-10 flex flex-col sm:flex-row items-center justify-between gap-2 text-text-3 text-[11px] select-none">
           <div className="flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity">
-            {/* DOKU Icon */}
             <svg
               className="w-3.5 h-3.5 text-text shrink-0"
               viewBox="0 0 24 24"
               fill="currentColor"
               aria-hidden="true"
             >
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+              <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V13H5V8.26l7-3.89v8.62z" />
             </svg>
             <span className="tracking-wide text-text">
-              Powered by <strong className="font-semibold text-text-2 tracking-normal">DOKU</strong>
+              Powered by <strong className="font-semibold text-text-2 tracking-normal">Midtrans</strong>
             </span>
           </div>
 

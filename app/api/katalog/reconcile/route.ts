@@ -52,10 +52,8 @@ export async function POST(req: NextRequest) {
     const statusResult = await getDokuStatus(targetInvoice);
     const result       = await applyGatewayStatus(order, statusResult);
 
-    if (
-      result.transitioned ||
-      (result.newStatus === "paid" && (!order.email_buyer_sent_at || !order.email_admin_sent_at))
-    ) {
+    // Kirim email HANYA jika baru saja terjadi transisi ke paid (idempoten via DB claim)
+    if (result.transitioned && result.newStatus === "paid") {
       const updated = { ...order, status: "paid" as const };
       try {
         await onOrderPaid(updated);
