@@ -637,7 +637,7 @@ function dokuResultToPaymentDetails(
     return {
       method:      "mandiri_bill",
       billKey:     result.vaNumber ?? null,
-      billerCode:  "70012",
+      billerCode:  "89608",
       bank:        "MANDIRI",
     };
   }

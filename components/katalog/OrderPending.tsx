@@ -1,5 +1,5 @@
 "use client";
-// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + Auto-Cancel + Midtrans Watermark
+// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + Auto-Cancel + DOKU Watermark
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -302,7 +302,7 @@ export function OrderPending({
         setFeedback({
           type: "pending",
           message: isSandbox
-            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator Midtrans lalu klik cek kembali."
+            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator DOKU lalu klik cek kembali."
             : "Pembayaran belum terdeteksi. Silakan selesaikan pembayaran sesuai instruksi di bawah, lalu klik cek kembali.",
         });
         setCooldown(5);
@@ -504,11 +504,11 @@ export function OrderPending({
                 </span>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-lg font-mono font-bold text-text tracking-wider">
-                    {currentDetails?.billerCode || "70012"}
+                    {currentDetails?.billerCode || "89608"}
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleCopy(currentDetails?.billerCode || "70012", "biller")}
+                    onClick={() => handleCopy(currentDetails?.billerCode || "89608", "biller")}
                     className="px-3 py-1 rounded-xl text-xs font-medium glass border border-white/20 hover:bg-white/15 text-text transition-all shrink-0 flex items-center gap-1 cursor-pointer"
                   >
                     {copiedKey === "biller" ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
@@ -541,7 +541,7 @@ export function OrderPending({
               <p className="font-semibold text-text">Petunjuk Livin&apos; by Mandiri:</p>
               <ul className="list-disc pl-4 space-y-1 text-text-2">
                 <li>Buka aplikasi Livin&apos; by Mandiri &gt; Menu <strong>Bayar &gt; Pembayaran Baru</strong>.</li>
-                <li>Pilih <strong>Multi Payment</strong> &gt; Masukkan penyedia jasa <strong>70012 (Midtrans)</strong>.</li>
+                <li>Pilih <strong>Multi Payment</strong> &gt; Masukkan penyedia jasa <strong>89608 (DOKU)</strong> atau <strong>DOKU Merchant</strong>.</li>
                 <li>Masukkan Bill Key di atas, lalu lakukan konfirmasi pembayaran.</li>
               </ul>
             </div>
@@ -589,7 +589,7 @@ export function OrderPending({
               <p className="font-semibold text-text">Petunjuk Pembayaran Kasir:</p>
               <ul className="list-disc pl-4 space-y-1 text-text-2">
                 <li>Kunjungi gerai <strong>{activeMethod === "indomaret" ? "Indomaret / Ceriamart" : "Alfamart / Alfamidi / Lawson"}</strong> terdekat.</li>
-                <li>Sampaikan ke kasir ingin melakukan pembayaran <strong>Midtrans / Transaksi Online</strong>.</li>
+                <li>Sampaikan ke kasir ingin melakukan pembayaran <strong>DOKU / Transaksi Online</strong>.</li>
                 <li>Tunjukkan kode pembayaran di atas ke kasir.</li>
                 <li>Bayar sesuai nominal yang tertera dan simpan struk pembayaran.</li>
               </ul>
@@ -722,7 +722,7 @@ export function OrderPending({
           </div>
         )}
 
-        {/* ── WATERMARK: POWERED BY MIDTRANS (Liquid Glass Aesthetic) ── */}
+        {/* ── WATERMARK: POWERED BY DOKU (Liquid Glass Aesthetic) ── */}
         <div className="pt-4 border-t border-white/[0.08] relative z-10 flex flex-col sm:flex-row items-center justify-between gap-2 text-text-3 text-[11px] select-none">
           <div className="flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity">
             <svg
@@ -734,7 +734,7 @@ export function OrderPending({
               <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V13H5V8.26l7-3.89v8.62z" />
             </svg>
             <span className="tracking-wide text-text">
-              Powered by <strong className="font-semibold text-text-2 tracking-normal">Midtrans</strong>
+              Powered by <strong className="font-semibold text-text-2 tracking-normal">DOKU</strong>
             </span>
           </div>
 

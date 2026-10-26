@@ -12,5 +12,5 @@ export const catalogConfig = {
     reconcilePerOrder:[1,  5]    as [number, number],
   },
   supportWhatsapp: "6285960158194",   // tombol bantuan; format internasional tanpa +
-  sandboxSimulatorHint: true,         // tampilkan petunjuk simulator saat MIDTRANS_IS_PRODUCTION=false
+  sandboxSimulatorHint: true,         // tampilkan petunjuk simulator saat DOKU_IS_PRODUCTION=false
 } as const;
