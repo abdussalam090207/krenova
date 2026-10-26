@@ -29,7 +29,13 @@ export const env = {
   EMAIL_FROM:            requireEnv("EMAIL_FROM"),
   ADMIN_EMAIL:           requireEnv("ADMIN_NOTIFY_EMAIL"),
   ADMIN_NOTIFY_EMAIL:    requireEnv("ADMIN_NOTIFY_EMAIL"),
-  SITE_URL:              requireEnv("NEXT_PUBLIC_SITE_URL"),
+  SITE_URL: (() => {
+    const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+    if (!raw || raw.includes("localhost") || raw.includes("127.0.0.1")) {
+      return "https://www.krenovas.my.id";
+    }
+    return raw.replace(/\/+$/, "");
+  })(),
   CATALOG_SECRET:        requireEnv("CATALOG_SECRET"),
 
   // Cloudflare R2
