@@ -105,6 +105,7 @@ export function CatalogCard({ product, siteUrl, isBestSeller }: Props) {
         <h2 className="text-sm font-bold text-text leading-snug line-clamp-2 mb-0.5">
           {product.title}
         </h2>
+        
 
         {/* Subjudul */}
         {product.subtitle && (
