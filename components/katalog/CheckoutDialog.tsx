@@ -2,6 +2,7 @@
 // components/katalog/CheckoutDialog.tsx — Dialog beli / dapatkan gratis
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2, X } from "lucide-react";
 import type { CatalogProduct } from "@/lib/catalog/types";
 import { catalogConfig } from "@/config/catalog";
 
@@ -22,8 +23,10 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
   const [accepted, setAccepted] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   // Guard ref untuk mencegah double-submit race condition (sync, tidak menunggu re-render)
   const submittingRef = useRef(false);
+  const redirectingRef = useRef(false);
   const [tOpen] = useState(() => Date.now());
 
   // Kunci scroll body dan tangani Escape saat modal terbuka
@@ -32,7 +35,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !submittingRef.current) onClose();
+      if (e.key === "Escape" && !submittingRef.current && !redirectingRef.current) onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     const timer = setTimeout(() => firstRef.current?.focus(), 60);
@@ -51,17 +54,24 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
       setAccepted(false);
       setErrors({});
       setSubmitting(false);
+      setRedirecting(false);
       submittingRef.current = false;
+      redirectingRef.current = false;
     }
   }, [open]);
 
   // Jika tidak dibuka, jangan render elemen apapun ke DOM
   if (!open) return null;
 
+  const isBusy = submitting || redirecting;
+  const isFree = product.purchase_mode === "free";
+  const ctaText = isFree ? "Dapatkan sekarang" : "Lanjut ke pembayaran";
+  const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${encodeURIComponent("Halo KRENOVA STUDIO, pembayaran sedang tidak tersedia, saya ingin membeli: " + product.title)}`;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // Guard ganda: cegah double-submit via ref (sync) maupun state (async)
-    if (submittingRef.current || submitting) return;
+    if (submittingRef.current || redirectingRef.current || isBusy) return;
 
     const errs: FieldErrors = {};
     const trimmedName = name.trim();
@@ -85,8 +95,8 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug: product.slug,
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
+          name: trimmedName,
+          email: trimmedEmail.toLowerCase(),
           acceptTerms: accepted,
           paymentMethod: "qris",
           website: "",   // honeypot kosong
@@ -97,7 +107,9 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
       const data = await res.json();
 
       if (res.ok && data.redirectTo) {
-        // Biarkan locked saat navigasi — tidak perlu unlock
+        // Kunci secara permanen saat navigasi — JANGAN pernah unlock kembali
+        redirectingRef.current = true;
+        setRedirecting(true);
         router.push(data.redirectTo);
         return;
       }
@@ -113,15 +125,13 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
     } catch {
       setErrors({ _global: "Koneksi bermasalah. Coba lagi." });
     } finally {
-      // Unlock hanya jika tidak redirect (ada error)
-      submittingRef.current = false;
-      setSubmitting(false);
+      // Unlock HANYA jika TIDAK sedang redirect (yaitu jika ada error)
+      if (!redirectingRef.current) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
-
-  const isFree = product.purchase_mode === "free";
-  const ctaText = isFree ? "Dapatkan sekarang" : "Lanjut ke pembayaran";
-  const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${encodeURIComponent("Halo KRENOVA STUDIO, pembayaran sedang tidak tersedia, saya ingin membeli: " + product.title)}`;
 
   return (
     <div
@@ -130,8 +140,8 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
       aria-labelledby="checkout-title"
       className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
-        // Jangan tutup saat sedang proses submit
-        if (submitting) return;
+        // Jangan tutup saat sedang proses submit atau redirect
+        if (isBusy) return;
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -157,13 +167,11 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            disabled={submitting}
+            disabled={isBusy}
             aria-label="Tutup"
             className="w-8 h-8 rounded-full flex items-center justify-center text-text-3 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition-all cursor-pointer -mr-1 -mt-1 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
+            <X size={18} />
           </button>
         </div>
 
@@ -194,7 +202,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
               maxLength={80}
               autoComplete="name"
               placeholder="Nama kamu"
-              disabled={submitting}
+              disabled={isBusy}
               className={`w-full px-4 py-3 rounded-2xl text-sm bg-white/[0.06] border transition-all text-text
                 placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] disabled:opacity-60 disabled:cursor-not-allowed ${errors.name ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
                 }`}
@@ -216,7 +224,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
               maxLength={254}
               autoComplete="email"
               placeholder="email@kamu.com"
-              disabled={submitting}
+              disabled={isBusy}
               className={`w-full px-4 py-3 rounded-2xl text-sm bg-white/[0.06] border transition-all text-text
                 placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] disabled:opacity-60 disabled:cursor-not-allowed ${errors.email ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
                 }`}
@@ -235,7 +243,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
                 id="co-terms"
                 checked={accepted}
                 onChange={(e) => setAccepted(e.target.checked)}
-                disabled={submitting}
+                disabled={isBusy}
                 className="mt-0.5 w-4 h-4 rounded-2xl accent-blue flex-shrink-0 cursor-pointer disabled:cursor-not-allowed"
               />
               <span className="text-xs text-text-2 leading-relaxed">
@@ -265,20 +273,24 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
           <div className="pt-2">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={isBusy}
               className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-text cursor-pointer
                glass-strong border border-white/20 transition-all
                disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                  </svg>
-                  Memproses…
+              {redirecting ? (
+                <span className="flex items-center justify-center gap-2 text-aqua">
+                  <Loader2 className="animate-spin w-4 h-4" />
+                  <span>{isFree ? "Menyiapkan akses…" : "Mengalihkan ke pembayaran…"}</span>
                 </span>
-              ) : ctaText}
+              ) : submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="animate-spin w-4 h-4" />
+                  <span>Memproses…</span>
+                </span>
+              ) : (
+                <span>{ctaText}</span>
+              )}
             </button>
           </div>
         </form>
