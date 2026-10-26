@@ -182,9 +182,9 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
           {/* Failed / canceled */}
           {(order.status === "failed" || order.status === "canceled") && (
             <div className="text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-full bg-rose/10 border border-rose/25 flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto rounded-full glass flex items-center justify-center">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  className="text-rose" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  className="text-text" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M18 6 6 18M6 6l12 12"/>
                 </svg>
               </div>
@@ -194,11 +194,11 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
               </p>
               <div className="flex flex-wrap gap-3 justify-center">
                 <Link href={`/katalog/${order.product_slug}`}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-blue text-white hover:bg-blue/90 transition-all">
+                  className="px-5 py-2.5 rounded-xl text-sm glass gap-2 px-3 py-2 text-text">
                   Coba lagi
                 </Link>
                 <a href={waUrl} target="_blank" rel="noopener noreferrer"
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium bg-[#25D366]/10 border border-[#25D366]/25 text-[#25D366]">
+                  className="px-5 py-2.5 rounded-xl text-sm font-medium glass gap-2 px-3 py-2 text-text">
                   Butuh bantuan?
                 </a>
               </div>
