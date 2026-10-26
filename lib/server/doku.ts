@@ -16,6 +16,16 @@ const BASE_URL = (() => {
   return IS_PROD ? "https://api.doku.com" : "https://api-sandbox.doku.com";
 })();
 
+// URL webhook callback yang dikirim ke DOKU agar DOKU tahu ke mana mengirim notifikasi
+// Diambil dari env, fallback ke production URL
+const WEBHOOK_URL = (() => {
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/+$/, "");
+  const base = siteUrl && !siteUrl.includes("localhost") && !siteUrl.includes("127.0.0.1")
+    ? siteUrl
+    : "https://krenovas.my.id";
+  return `${base}/api/webhooks/doku`;
+})();
+
 export const isDokuSandbox = !IS_PROD;
 
 // â”€â”€â”€ Tipe Publik â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -271,6 +281,10 @@ async function chargeVA(p: DokuChargeParams, bankCode: string): Promise<DokuChar
       name:  sanitizeName(p.buyerName),
       email: p.buyerEmail.trim().toLowerCase(),
     },
+    // Memberitahu DOKU ke mana mengirim webhook notifikasi pembayaran
+    additional_info: {
+      callback_url: WEBHOOK_URL,
+    },
   };
 
   let res: { status: number; data: Record<string, unknown> } | null = null;
@@ -349,11 +363,17 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
       currency:       "IDR",
     },
     payment: {
-      payment_due_date: p.expiryMinutes,
+      payment_due_date:  p.expiryMinutes,
+      // Memberitahu DOKU ke mana mengirim webhook notifikasi pembayaran
+      notification_url:  WEBHOOK_URL,
     },
     customer: {
       name:  sanitizeName(p.buyerName),
       email: p.buyerEmail.trim().toLowerCase(),
+    },
+    // additional_info sebagai fallback untuk beberapa versi endpoint DOKU
+    additional_info: {
+      callback_url: WEBHOOK_URL,
     },
   };
 
