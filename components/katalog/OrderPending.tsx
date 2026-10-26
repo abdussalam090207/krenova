@@ -32,14 +32,16 @@ interface ReconcileFeedback {
 }
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: "qris", label: "QRIS & E-Wallet" },
-  { value: "bca_va", label: "BCA Virtual Account" },
-  { value: "mandiri_bill", label: "Mandiri Bill" },
-  { value: "bni_va", label: "BNI Virtual Account" },
-  { value: "bri_va", label: "BRI Virtual Account" },
-  { value: "permata_va", label: "Permata Virtual Account" },
-  { value: "indomaret", label: "Indomaret" },
-  { value: "alfamart", label: "Alfamart" },
+  // Channel aktif di DOKU production (urutan prioritas)
+  { value: "bri_va",     label: "BRI Virtual Account" },
+  { value: "cimb_va",   label: "CIMB Niaga Virtual Account" },
+  { value: "danamon_va", label: "Danamon Virtual Account" },
+  // Channel lain (aktifkan setelah approval DOKU)
+  { value: "qris",          label: "QRIS & E-Wallet" },
+  { value: "bca_va",        label: "BCA Virtual Account" },
+  { value: "mandiri_bill",  label: "Mandiri Bill" },
+  { value: "bni_va",        label: "BNI Virtual Account" },
+  { value: "permata_va",    label: "Permata Virtual Account" },
 ];
 
 export function OrderPending({
@@ -49,7 +51,7 @@ export function OrderPending({
   amountIdr,
   qrDataUrl,
   paymentDetails,
-  paymentMethod = "qris",
+  paymentMethod = "bri_va",
   expiresAt,
   isSandbox,
 }: Props) {
@@ -60,7 +62,7 @@ export function OrderPending({
   const beaconActiveRef = useRef(true);
 
   // State metode pembayaran aktif & rincian pembayaran (mendukung pergantian dinamis)
-  const initialMethod = (paymentDetails?.method || (paymentMethod as PaymentMethod) || "qris");
+  const initialMethod = (paymentDetails?.method || (paymentMethod as PaymentMethod) || "bri_va");
   const [activeMethod, setActiveMethod] = useState<PaymentMethod>(initialMethod);
   const [currentDetails, setCurrentDetails] = useState<PaymentDetails | null>(paymentDetails ?? null);
   const [currentQrDataUrl, setCurrentQrDataUrl] = useState<string | null>(qrDataUrl ?? null);
@@ -766,6 +768,10 @@ function getPaymentLabel(m: PaymentMethod): string {
       return "BRI Virtual Account";
     case "permata_va":
       return "Permata Virtual Account";
+    case "cimb_va":
+      return "CIMB Niaga Virtual Account";
+    case "danamon_va":
+      return "Danamon Virtual Account";
     case "indomaret":
       return "Indomaret";
     case "alfamart":

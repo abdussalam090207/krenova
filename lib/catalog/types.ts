@@ -64,6 +64,8 @@ export type PaymentMethod =
   | "bri_va"
   | "mandiri_bill"
   | "permata_va"
+  | "cimb_va"
+  | "danamon_va"
   | "indomaret"
   | "alfamart";
 

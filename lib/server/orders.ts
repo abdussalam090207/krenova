@@ -125,29 +125,38 @@ export async function createOrder(input: CreateOrderInput): Promise<{
       throw Object.assign(new Error("Pembayaran sedang tidak tersedia."), { status: 502 });
     }
 
-    // Jika channel QRIS gagal (misalnya akun DOKU Production baru belum di-approve channel QRIS-nya oleh BI/ASPI),
-    // otomatis fallback ke BCA Virtual Account agar checkout user tetap berhasil dan tidak terputus!
+    // Jika channel QRIS gagal (belum diaktifkan oleh BI/ASPI atau akun belum approved),
+    // otomatis fallback ke channel VA yang aktif agar checkout tidak terputus.
+    // Urutan fallback berdasarkan hasil test live production: BRI → CIMB → DANAMON
     if (!chargeResult.ok && dokuChannel === "QRIS") {
-      console.warn(`[createOrder] Charge QRIS gagal (${chargeResult.errorMessage}). Mencoba fallback ke BCA Virtual Account...`);
-      try {
-        const vaFallback = await chargeDoku({
-          orderCode:     order.order_code,
-          amountIdr,
-          buyerName:     input.name,
-          buyerEmail:    input.email,
-          productTitle:  product.title,
-          expiryMinutes: catalogConfig.paymentExpiryMinutes,
-          channel:       "VIRTUAL_ACCOUNT_BCA",
-        });
-        if (vaFallback.ok) {
-          chargeResult = vaFallback;
-          activeMethod = "bca_va";
-          console.log(`[createOrder] Berhasil fallback ke BCA VA (${vaFallback.vaNumber}) untuk ${order.order_code}`);
-        } else {
-          console.error("[createOrder] Fallback BCA VA juga gagal:", vaFallback.errorMessage);
+      console.warn(`[createOrder] Charge QRIS gagal (${chargeResult.errorMessage}). Mencoba fallback ke Virtual Account aktif...`);
+      const vaFallbackChannels: Array<{ channel: DokuPaymentChannel; method: PaymentMethod }> = [
+        { channel: "VIRTUAL_ACCOUNT_BRI",     method: "bri_va" },
+        { channel: "VIRTUAL_ACCOUNT_CIMB",    method: "cimb_va" },
+        { channel: "VIRTUAL_ACCOUNT_DANAMON", method: "danamon_va" },
+      ];
+      for (const fb of vaFallbackChannels) {
+        try {
+          const vaFallback = await chargeDoku({
+            orderCode:     order.order_code,
+            amountIdr,
+            buyerName:     input.name,
+            buyerEmail:    input.email,
+            productTitle:  product.title,
+            expiryMinutes: catalogConfig.paymentExpiryMinutes,
+            channel:       fb.channel,
+          });
+          if (vaFallback.ok) {
+            chargeResult = vaFallback;
+            activeMethod = fb.method;
+            console.log(`[createOrder] Berhasil fallback ke ${fb.channel} (${vaFallback.vaNumber}) untuk ${order.order_code}`);
+            break;
+          } else {
+            console.warn(`[createOrder] Fallback ${fb.channel} gagal: ${vaFallback.errorMessage}`);
+          }
+        } catch (vaErr) {
+          console.warn(`[createOrder] Exception saat fallback ${fb.channel}:`, vaErr);
         }
-      } catch (vaErr) {
-        console.error("[createOrder] Exception saat fallback BCA VA:", vaErr);
       }
     }
 
@@ -607,6 +616,8 @@ function paymentMethodToDokuChannel(method: PaymentMethod): DokuPaymentChannel {
     case "bri_va":      return "VIRTUAL_ACCOUNT_BRI";
     case "mandiri_bill": return "VIRTUAL_ACCOUNT_MANDIRI";
     case "permata_va":  return "VIRTUAL_ACCOUNT_PERMATA";
+    case "cimb_va":    return "VIRTUAL_ACCOUNT_CIMB";
+    case "danamon_va": return "VIRTUAL_ACCOUNT_DANAMON";
     case "qris":
     default:           return "QRIS";
   }
