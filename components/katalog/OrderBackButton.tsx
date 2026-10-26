@@ -116,14 +116,14 @@ export function OrderBackButton({ orderCode, token, isPending }: Props) {
               </button>
 
               {/* Icon Warning Badge */}
-              <div className="relative mx-auto mb-4 w-14 h-14 rounded-2xl flex items-center justify-center bg-rose-500/15 border border-rose-500/30 text-rose-400 shadow-[0_0_30px_rgba(244,63,94,0.3)]">
+              <div className="relative mx-auto mb-4 w-14 h-14 rounded-2xl flex items-center justify-center bg-text-500/15 border border-text-500/30 text-text">
                 <AlertTriangle size={26} className="animate-pulse" />
               </div>
 
               {/* Title & Description */}
               <h2
                 id="cancel-modal-title"
-                className="text-lg sm:text-xl font-bold font-display text-white mb-2 tracking-tight"
+                className="text-lg sm:text-xl font-bold font-display text-text mb-2 tracking-tight"
               >
                 Batalkan Pesanan?
               </h2>
@@ -133,9 +133,9 @@ export function OrderBackButton({ orderCode, token, isPending }: Props) {
               </p>
 
               {/* Order Code Chip */}
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono text-text-3 bg-white/[0.05] border border-white/10 mb-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono text-text glass px-3 py-1.5 mb-4">
                 <span>Kode:</span>
-                <span className="text-white font-semibold">{orderCode}</span>
+                <span className="text-text-2 font-semibold">{orderCode}</span>
               </div>
 
               {/* Action Buttons */}
@@ -144,7 +144,7 @@ export function OrderBackButton({ orderCode, token, isPending }: Props) {
                   type="button"
                   onClick={handleConfirmCancel}
                   disabled={cancelling}
-                  className="w-full py-3.5 px-5 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 border border-rose-400/40 shadow-[0_4px_20px_rgba(225,29,72,0.35)] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-3.5 px-5 rounded-2xl font-bold text-sm text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 border border-rose-400/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
                 >
                   {cancelling ? (
                     <>
@@ -160,7 +160,7 @@ export function OrderBackButton({ orderCode, token, isPending }: Props) {
                   type="button"
                   onClick={() => setShowModal(false)}
                   disabled={cancelling}
-                  className="w-full py-3 px-5 rounded-2xl font-semibold text-sm text-text-2 hover:text-white glass border border-white/15 hover:border-white/30 transition-all hover:bg-white/[0.08] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-3 px-5 rounded-2xl font-semibold text-sm text-text-2 hover:text-text glass border border-white/15 hover:border-white/30 transition-all hover:bg-white/[0.08] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   Tetap di Sini &amp; Lanjut Bayar
                 </button>

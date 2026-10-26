@@ -624,8 +624,8 @@ export function OrderPending({
                         handleSwitchPayment(opt.value);
                       }}
                       className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs md:text-sm transition-all flex items-center justify-between cursor-pointer ${isSelected
-                        ? "bg-white/[0.12] text-white font-semibold border border-white/20 shadow-sm"
-                        : "text-text-2 hover:text-white hover:bg-white/[0.06]"
+                        ? "bg-white/[0.12] text-text font-semibold border border-text/20 shadow-sm"
+                        : "text-text-2 hover:text-text-2 hover:bg-white/[0.06]"
                         }`}
                     >
                       <span>{opt.label}</span>
@@ -682,7 +682,7 @@ export function OrderPending({
             href={waUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2.5 rounded-xl text-xs md:text-sm font-medium glass border border-white/12 hover:bg-white/10 text-text-2 hover:text-white transition-all inline-flex items-center"
+            className="px-4 py-2.5 rounded-xl text-xs md:text-sm font-medium glass border border-white/12 hover:bg-white/10 text-text-2 hover:text-text transition-all inline-flex items-center"
           >
             Butuh bantuan?
           </a>
@@ -694,9 +694,9 @@ export function OrderPending({
             className={`p-3 rounded-2xl text-xs text-left transition-all flex items-start gap-2.5 relative z-10 animate-fade-in ${feedback.type === "success"
               ? "bg-emerald-500/15 border border-emerald-500/35 text-emerald-300"
               : feedback.type === "pending"
-                ? "bg-amber-500/15 border border-amber-500/35 text-amber-200"
+                ? "bg-amber-500/15 border border-amber-500/35 text-amber-300"
                 : feedback.type === "info"
-                  ? "bg-blue/15 border border-blue/35 text-blue-200"
+                  ? "bg-blue/15 border border-blue/35 text-blue-300"
                   : "bg-rose-500/15 border border-rose-500/35 text-rose-300"
               }`}
           >
