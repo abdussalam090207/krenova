@@ -279,7 +279,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
                disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {redirecting ? (
-                <span className="flex items-center justify-center gap-2 text-aqua">
+                <span className="flex items-center justify-center gap-2 text-text-2">
                   <Loader2 className="animate-spin w-4 h-4" />
                   <span>{isFree ? "Menyiapkan akses…" : "Mengalihkan ke pembayaran…"}</span>
                 </span>
