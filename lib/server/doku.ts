@@ -377,6 +377,8 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
     },
   };
 
+  
+
   try {
     const res = await callDoku("/checkout/v1/payment", body);
     const qrString = extractQrString(res.data);
