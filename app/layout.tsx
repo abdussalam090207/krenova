@@ -99,7 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           } catch (e) {}
         `}</Script>
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <TopLoadingBar />
           {/* Flag intro ditulis sebelum browser paint — mencegah flash konten */}

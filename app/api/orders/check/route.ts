@@ -4,8 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/server/supabase-admin";
-import { applyGatewayStatus, loadOrder, type OrderRow } from "@/lib/server/orders";
-import { getStatus } from "@/lib/server/midtrans";
+import { applyGatewayStatus, loadOrder, getDokuStatus, type OrderRow } from "@/lib/server/orders";
 import { onOrderPaid } from "@/lib/server/email";
 import { maskEmail } from "@/lib/catalog/format";
 
@@ -32,25 +31,28 @@ async function checkAndReconcileOrder(orderCode: string, token?: string | null) 
 
   let currentStatus = order.status;
 
-  // Jika pesanan masih pending, verifikasi langsung ke Midtrans API
+  // Jika pesanan masih pending, verifikasi langsung ke DOKU API
   if (order.status === "pending") {
     try {
-      const targetId = order.gateway_payment_type && order.gateway_payment_type !== "qris"
-        ? `${order.order_code}-${order.gateway_payment_type}`
-        : order.order_code;
+      // Gunakan invoice number yang aktif (bisa ada suffix metode pembayaran)
+      const targetInvoice =
+        order.gateway_payment_type && order.gateway_payment_type !== "qris"
+          ? `${order.order_code}-${order.gateway_payment_type}`
+          : order.order_code;
 
-      let remote: Record<string, unknown> | null = null;
+      let statusResult: Awaited<ReturnType<typeof getDokuStatus>> | null = null;
       try {
-        remote = await getStatus(targetId);
+        statusResult = await getDokuStatus(targetInvoice);
       } catch {
-        remote = await getStatus(order.order_code).catch(() => null);
+        // Fallback ke base invoice_number
+        statusResult = await getDokuStatus(order.order_code).catch(() => null);
       }
 
-      if (remote) {
-        const result = await applyGatewayStatus(order, remote);
+      if (statusResult) {
+        const result = await applyGatewayStatus(order, statusResult);
         currentStatus = (result.newStatus as OrderRow["status"]) ?? order.status;
 
-        // Jika berpindah status ke paid
+        // Jika berpindah status ke paid, kirim email notifikasi
         if (
           result.transitioned ||
           (result.newStatus === "paid" && (!order.email_buyer_sent_at || !order.email_admin_sent_at))
@@ -63,8 +65,8 @@ async function checkAndReconcileOrder(orderCode: string, token?: string | null) 
           }
         }
       }
-    } catch (midtransErr) {
-      console.error("[orders/check] Gagal mengambil status Midtrans:", midtransErr);
+    } catch (dokuErr) {
+      console.error("[orders/check] Gagal mengambil status DOKU:", dokuErr);
     }
   } else if (order.status === "paid") {
     // Jika sudah paid tetapi email notifikasi belum terkirim
@@ -79,18 +81,19 @@ async function checkAndReconcileOrder(orderCode: string, token?: string | null) 
 
   return {
     ok: true,
-    order_code: order.order_code,
+    order_code:    order.order_code,
     product_title: order.product_title,
-    status: currentStatus,
-    paid: currentStatus === "paid",
-    amount_idr: order.amount_idr,
-    buyer_email: order.buyer_email ? maskEmail(order.buyer_email) : undefined,
+    status:        currentStatus,
+    paid:          currentStatus === "paid",
+    amount_idr:    order.amount_idr,
+    buyer_email:   order.buyer_email ? maskEmail(order.buyer_email) : undefined,
     message:
       currentStatus === "paid"
         ? "Pesanan berhasil diverifikasi lunas dan email notifikasi telah diproses."
         : `Status transaksi saat ini: ${currentStatus}`,
   };
 }
+
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;

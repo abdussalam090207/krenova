@@ -1,5 +1,5 @@
 "use client";
-// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + Auto-Cancel + Midtrans Watermark
+// components/katalog/OrderPending.tsx — Tampilan Pembayaran Multi-Channel + Custom Liquid Glass Dropdown + DOKU
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -32,14 +32,12 @@ interface ReconcileFeedback {
 }
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: "qris", label: "QRIS & E-Wallet" },
-  { value: "bca_va", label: "BCA Virtual Account" },
-  { value: "mandiri_bill", label: "Mandiri Bill" },
-  { value: "bni_va", label: "BNI Virtual Account" },
-  { value: "bri_va", label: "BRI Virtual Account" },
-  { value: "permata_va", label: "Permata Virtual Account" },
-  { value: "indomaret", label: "Indomaret" },
-  { value: "alfamart", label: "Alfamart" },
+  { value: "qris",         label: "QRIS & E-Wallet" },
+  { value: "bca_va",       label: "BCA Virtual Account" },
+  { value: "mandiri_bill", label: "Mandiri Virtual Account" },
+  { value: "bni_va",       label: "BNI Virtual Account" },
+  { value: "bri_va",       label: "BRI Virtual Account" },
+  { value: "permata_va",   label: "Permata Virtual Account" },
 ];
 
 export function OrderPending({
@@ -300,7 +298,7 @@ export function OrderPending({
         setFeedback({
           type: "pending",
           message: isSandbox
-            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator Midtrans lalu klik cek kembali."
+            ? "Pembayaran belum terdeteksi. Selesaikan pembayaran di simulator DOKU sandbox lalu klik cek kembali."
             : "Pembayaran belum terdeteksi. Silakan selesaikan pembayaran sesuai instruksi di bawah, lalu klik cek kembali.",
         });
         setCooldown(5);
@@ -358,15 +356,12 @@ export function OrderPending({
   );
   const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${waMsg}`;
 
-  // Simulator URL
-  let simulatorUrl = "https://simulator.sandbox.midtrans.com/qris/index";
-  let simulatorLabel = "Simulator QRIS Midtrans";
+  // Simulator URL (DOKU Sandbox)
+  let simulatorUrl  = "https://sandbox.doku.com/simulator/qris";
+  let simulatorLabel = "Simulator QRIS DOKU";
   if (isVA || isMandiri) {
-    simulatorUrl = "https://simulator.sandbox.midtrans.com/openapi/va/index";
-    simulatorLabel = "Simulator Virtual Account Midtrans";
-  } else if (isOtc) {
-    simulatorUrl = "https://simulator.sandbox.midtrans.com/cstore/index";
-    simulatorLabel = "Simulator Kasir Retail Midtrans";
+    simulatorUrl  = "https://sandbox.doku.com/simulator/va";
+    simulatorLabel = "Simulator Virtual Account DOKU";
   }
 
   return (
@@ -710,19 +705,20 @@ export function OrderPending({
           </div>
         )}
 
-        {/* ── WATERMARK: POWERED BY MIDTRANS (Liquid Glass Aesthetic) ── */}
+        {/* ── WATERMARK: POWERED BY DOKU (Liquid Glass Aesthetic) ── */}
         <div className="pt-4 border-t border-white/[0.08] relative z-10 flex flex-col sm:flex-row items-center justify-between gap-2 text-text-3 text-[11px] select-none">
           <div className="flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity">
+            {/* DOKU Icon */}
             <svg
               className="w-3.5 h-3.5 text-text shrink-0"
               viewBox="0 0 24 24"
               fill="currentColor"
               aria-hidden="true"
             >
-              <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V13H5V8.26l7-3.89v8.62z" />
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
             </svg>
             <span className="tracking-wide text-text">
-              Powered by <strong className="font-semibold text-text-2 tracking-normal">Midtrans</strong>
+              Powered by <strong className="font-semibold text-text-2 tracking-normal">DOKU</strong>
             </span>
           </div>
 

@@ -1,10 +1,9 @@
-// app/api/katalog/reconcile/route.ts — POST: rekonsiliasi status langsung ke Midtrans
+// app/api/katalog/reconcile/route.ts — POST: rekonsiliasi status langsung ke DOKU
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { loadOrder, applyGatewayStatus } from "@/lib/server/orders";
-import { getStatus } from "@/lib/server/midtrans";
+import { loadOrder, applyGatewayStatus, getDokuStatus } from "@/lib/server/orders";
 import { onOrderPaid } from "@/lib/server/email";
 import { allow } from "@/lib/server/rate-limit";
 import { catalogConfig } from "@/config/catalog";
@@ -44,14 +43,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const remote = await getStatus(order.order_code);
-    const result = await applyGatewayStatus(order, remote);
+    // Gunakan invoice_number aktif (bisa ada suffix metode pembayaran)
+    const targetInvoice =
+      order.gateway_payment_type && order.gateway_payment_type !== "qris"
+        ? `${order.order_code}-${order.gateway_payment_type}`
+        : order.order_code;
+
+    const statusResult = await getDokuStatus(targetInvoice);
+    const result       = await applyGatewayStatus(order, statusResult);
 
     if (
       result.transitioned ||
       (result.newStatus === "paid" && (!order.email_buyer_sent_at || !order.email_admin_sent_at))
     ) {
-      // Transisi ke paid → kirim email notifikasi ganda
       const updated = { ...order, status: "paid" as const };
       try {
         await onOrderPaid(updated);

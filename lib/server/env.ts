@@ -17,8 +17,14 @@ export const env = {
   SUPABASE_URL:          requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
   SUPABASE_ANON_KEY:     requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   SUPABASE_SERVICE_ROLE: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  MIDTRANS_SERVER_KEY:   requireEnv("MIDTRANS_SERVER_KEY"),
+  // Midtrans (dipertahankan untuk backward compatibility / webhook lama)
+  MIDTRANS_SERVER_KEY:   process.env.MIDTRANS_SERVER_KEY ?? "",
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === "true",
+  // DOKU Direct API
+  DOKU_CLIENT_ID:        requireEnv("DOKU_CLIENT_ID"),
+  DOKU_SECRET_KEY:       requireEnv("DOKU_SECRET_KEY"),
+  DOKU_BASE_URL:         process.env.DOKU_BASE_URL ?? "https://api-sandbox.doku.com",
+  DOKU_IS_PRODUCTION:    process.env.DOKU_IS_PRODUCTION === "true",
   RESEND_API_KEY:        requireEnv("RESEND_API_KEY"),
   EMAIL_FROM:            requireEnv("EMAIL_FROM"),
   ADMIN_EMAIL:           requireEnv("ADMIN_NOTIFY_EMAIL"),

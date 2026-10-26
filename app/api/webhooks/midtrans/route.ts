@@ -103,7 +103,28 @@ export async function POST(req: NextRequest) {
   // ── Jangan percaya isi webhook; cek status langsung ke Midtrans
   const remote = await getStatus(order_id);
 
-  const result = await applyGatewayStatus(rawOrder, remote);
+  // Wrap Midtrans response ke format DokuStatusResult (backward compatibility)
+  const midtransStatusMap: Record<string, string> = {
+    settlement: "SUCCESS",
+    capture:    "SUCCESS",
+    pending:    "PENDING",
+    expire:     "EXPIRED",
+    cancel:     "CANCELED",
+    deny:       "FAILED",
+    failure:    "FAILED",
+  };
+  const midtransStatus = String(remote.transaction_status ?? "pending");
+  const mappedStatus   = midtransStatusMap[midtransStatus] ?? "PENDING";
+
+  const dokuStyleResult = {
+    ok:                true,
+    invoiceNumber:     order_id,
+    transactionStatus: mappedStatus,
+    amountIdr:         Math.round(Number(remote.gross_amount ?? rawOrder.amount_idr)),
+    raw:               remote,
+  };
+
+  const result = await applyGatewayStatus(rawOrder, dokuStyleResult);
 
   // Kirim email jika status baru lunas, atau jika sudah lunas tetapi email belum terkirim
   if (

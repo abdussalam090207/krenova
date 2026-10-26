@@ -1,15 +1,18 @@
-// lib/server/orders.ts — Buat pesanan, terapkan status gateway, muat pesanan, pembatalan, ganti pembayaran (v3)
+// lib/server/orders.ts — Buat pesanan, terapkan status gateway, muat pesanan, pembatalan, ganti pembayaran (v4 — DOKU)
 import "server-only";
 import { supabaseAdmin } from "./supabase-admin";
 import {
-  chargePayment,
-  extractPaymentDetails,
-  cancelTransaction,
-  type PaymentMethod,
-  type PaymentDetails,
-} from "./midtrans";
+  chargeDoku,
+  getDokuStatus,
+  isDokuSandbox,
+  type DokuPaymentChannel,
+} from "./doku";
 import { orderToken } from "./tokens";
 import { catalogConfig } from "@/config/catalog";
+
+// ─── Re-export tipe kompatibel (agar komponen yang ada tidak perlu ubah import) ─
+import type { PaymentMethod, PaymentDetails } from "@/lib/catalog/types";
+export type { PaymentMethod, PaymentDetails };
 
 // ─── Tipe internal (tidak diekspor ke client) ─────────────────────────────
 
@@ -96,19 +99,21 @@ export async function createOrder(input: CreateOrderInput): Promise<{
     throw new Error(`Gagal membuat pesanan: ${oErr?.message}`);
   }
 
-  // 4. Charge Payment ke Midtrans (hanya paid)
+  // 4. Charge Payment ke DOKU Direct API (hanya paid)
   if (!isFree) {
     const method: PaymentMethod = input.paymentMethod || "qris";
-    let chargeRes: Record<string, unknown>;
+    const dokuChannel = paymentMethodToDokuChannel(method);
+
+    let chargeResult: Awaited<ReturnType<typeof chargeDoku>>;
     try {
-      chargeRes = await chargePayment({
-        orderCode: order.order_code,
-        amount: amountIdr,
-        name: input.name,
-        email: input.email,
-        title: product.title,
-        minutes: catalogConfig.paymentExpiryMinutes,
-        paymentMethod: method,
+      chargeResult = await chargeDoku({
+        orderCode:     order.order_code,
+        amountIdr,
+        buyerName:     input.name,
+        buyerEmail:    input.email,
+        productTitle:  product.title,
+        expiryMinutes: catalogConfig.paymentExpiryMinutes,
+        channel:       dokuChannel,
       });
     } catch {
       await supabaseAdmin
@@ -118,46 +123,34 @@ export async function createOrder(input: CreateOrderInput): Promise<{
       throw Object.assign(new Error("Pembayaran sedang tidak tersedia."), { status: 502 });
     }
 
-    const statusCode = String(chargeRes.status_code ?? "");
-    const paymentDetails = extractPaymentDetails(chargeRes, method);
-
-    const hasPayload =
-      method === "qris"
-        ? Boolean(paymentDetails.qrString)
-        : Boolean(paymentDetails.vaNumber || paymentDetails.billKey || paymentDetails.paymentCode);
-
-    if (statusCode !== "201" || !hasPayload) {
+    if (!chargeResult.ok) {
       await supabaseAdmin
         .from("catalog_orders")
-        .update({
-          status: "failed",
-          gateway_status: (chargeRes.transaction_status as string) ?? "charge_failed",
-        })
+        .update({ status: "failed", gateway_status: "charge_failed" })
         .eq("id", order.id);
       throw Object.assign(new Error("Pembayaran sedang tidak tersedia."), { status: 502 });
     }
 
-    const expiresAt = chargeRes.expiry_time
-      ? new Date(chargeRes.expiry_time as string).toISOString()
+    const paymentDetails = dokuResultToPaymentDetails(chargeResult, method);
+    const expiresAt = chargeResult.expiredDate
+      ? new Date(chargeResult.expiredDate).toISOString()
       : new Date(Date.now() + catalogConfig.paymentExpiryMinutes * 60_000).toISOString();
 
     const qrOrPayload = JSON.stringify({
-      activeMethod: method,
+      activeMethod:  method,
       activeDetails: paymentDetails,
-      methods: {
-        [method]: paymentDetails,
-      },
+      methods:       { [method]: paymentDetails },
     });
 
     await supabaseAdmin
       .from("catalog_orders")
       .update({
-        gateway: "midtrans",
-        gateway_transaction_id: (chargeRes.transaction_id as string) ?? null,
-        gateway_payment_type: method,
-        gateway_status: "pending",
-        qr_string: qrOrPayload,
-        expires_at: expiresAt,
+        gateway:                "doku",
+        gateway_transaction_id: chargeResult.invoiceNumber,
+        gateway_payment_type:   method,
+        gateway_status:         "pending",
+        qr_string:              qrOrPayload,
+        expires_at:             expiresAt,
       })
       .eq("id", order.id);
   }
@@ -184,19 +177,23 @@ export async function createOrder(input: CreateOrderInput): Promise<{
 
 type InternalStatus = "paid" | "pending" | "expired" | "canceled" | "failed" | "alert";
 
-function mapStatus(s: string, fraud?: string): InternalStatus {
-  switch (s) {
-    case "settlement": return "paid";
-    case "capture":    return fraud === "accept" ? "paid" : "pending";
-    case "pending":    return "pending";
-    case "expire":     return "expired";
-    case "cancel":     return "canceled";
-    case "deny":
-    case "failure":    return "failed";
-    case "refund":
-    case "partial_refund":
-    case "chargeback":
-    case "partial_chargeback": return "alert";
+/**
+ * Memetakan status DOKU → status internal KRENOVA.
+ * Status DOKU: SUCCESS, PENDING, FAILED, EXPIRED, CANCELED, REFUNDED
+ */
+function mapDokuStatus(s: string): InternalStatus {
+  const upper = s.toUpperCase();
+  switch (upper) {
+    case "SUCCESS":
+    case "SETTLEMENT": return "paid";
+    case "PENDING":    return "pending";
+    case "EXPIRED":    return "expired";
+    case "CANCELED":
+    case "CANCELLED":  return "canceled";
+    case "FAILED":
+    case "FAILURE":    return "failed";
+    case "REFUNDED":
+    case "CHARGEBACK": return "alert";
     default:           return "pending";
   }
 }
@@ -207,93 +204,84 @@ export interface ApplyResult {
 }
 
 /**
- * Terapkan status dari respons Midtrans secara atomik dan idempoten.
- * remote = hasil getStatus() langsung dari Midtrans — bukan isi webhook.
+ * Terapkan status dari respons DOKU secara atomik dan idempoten.
+ * statusResult = hasil getDokuStatus() langsung dari DOKU — bukan isi webhook.
  */
 export async function applyGatewayStatus(
   order: OrderRow,
-  remote: Record<string, unknown>,
+  statusResult: Awaited<ReturnType<typeof getDokuStatus>>,
 ): Promise<ApplyResult> {
-  // 1. Pastikan order_id cocok (cocok persis atau berawalan order_code)
-  const remoteOrderId = String(remote.order_id ?? "");
-  const baseOrderId = remoteOrderId.split("-").slice(0, 3).join("-");
-  if (remoteOrderId !== order.order_code && baseOrderId !== order.order_code) {
+  // 1. Pastikan invoice_number cocok
+  const remoteInvoice = statusResult.invoiceNumber;
+  const baseInvoice   = remoteInvoice.split("-").slice(0, 3).join("-");
+  if (remoteInvoice !== order.order_code && baseInvoice !== order.order_code) {
     return { transitioned: false, newStatus: order.status };
   }
 
-  // 2. Verifikasi nominal
-  const remoteAmount = Math.round(Number(remote.gross_amount ?? 0));
-  if (remoteAmount !== order.amount_idr) {
-    // Nominal tidak cocok → jangan lunas, buat peringatan
+  // 2. Verifikasi nominal (hanya jika DOKU mengembalikan amount)
+  if (statusResult.amountIdr > 0 && statusResult.amountIdr !== order.amount_idr) {
     try {
       await supabaseAdmin.from("catalog_notifications").insert({
-        type: "payment_alert",
+        type:     "payment_alert",
         order_id: order.id,
-        title: "Nominal tidak cocok",
-        body: `Pesanan ${order.order_code}: nominal di DB Rp ${order.amount_idr}, Midtrans Rp ${remoteAmount}`,
-        meta: { order_code: order.order_code, expected: order.amount_idr, received: remoteAmount },
+        title:    "Nominal tidak cocok",
+        body:     `Pesanan ${order.order_code}: DB Rp ${order.amount_idr}, DOKU Rp ${statusResult.amountIdr}`,
+        meta:     { order_code: order.order_code, expected: order.amount_idr, received: statusResult.amountIdr },
       });
     } catch {}
     return { transitioned: false, newStatus: order.status };
   }
 
-  const internalStatus = mapStatus(
-    String(remote.transaction_status ?? ""),
-    String(remote.fraud_status ?? ""),
-  );
+  const rawStatus     = statusResult.transactionStatus ?? "pending";
+  const internalStatus = mapDokuStatus(rawStatus);
 
   // 3. Tangani alert (refund/chargeback)
   if (internalStatus === "alert") {
     await supabaseAdmin
       .from("catalog_orders")
-      .update({ gateway_status: String(remote.transaction_status) })
+      .update({ gateway_status: rawStatus })
       .eq("id", order.id);
     try {
       await supabaseAdmin.from("catalog_notifications").insert({
-        type: "payment_alert",
+        type:     "payment_alert",
         order_id: order.id,
-        title: "Peringatan: refund/chargeback",
-        body: `Pesanan ${order.order_code}: ${remote.transaction_status}`,
-        meta: { order_code: order.order_code, status: remote.transaction_status },
+        title:    "Peringatan: refund/chargeback",
+        body:     `Pesanan ${order.order_code}: ${rawStatus}`,
+        meta:     { order_code: order.order_code, status: rawStatus },
       });
     } catch {}
-    return { transitioned: false, newStatus: String(remote.transaction_status) };
+    return { transitioned: false, newStatus: rawStatus };
   }
 
   if (internalStatus === "paid") {
-    // Update atomik: bila masih pending/expired/canceled (idempoten dan tahan race-condition pembatalan)
+    // Update atomik: idempoten dan tahan race-condition
     const { data } = await supabaseAdmin
       .from("catalog_orders")
       .update({
-        status: "paid",
-        paid_at: new Date().toISOString(),
-        gateway_status: String(remote.transaction_status),
-        gateway_payment_type: String(remote.payment_type ?? "qris"),
+        status:               "paid",
+        paid_at:              new Date().toISOString(),
+        gateway_status:       rawStatus,
+        gateway_payment_type: order.gateway_payment_type ?? "qris",
       })
       .eq("id", order.id)
       .in("status", ["pending", "expired", "canceled"])
       .select()
       .single<OrderRow>();
 
-    if (data) {
-      // Transisi nyata terjadi
-      return { transitioned: true, newStatus: "paid" };
-    }
+    if (data) return { transitioned: true, newStatus: "paid" };
     return { transitioned: false, newStatus: "paid" };
   }
 
   // pending/expired/canceled/failed
-  const validFrom: string[] = internalStatus === "expired"  ? ["pending"] :
-                               internalStatus === "canceled" ? ["pending"] :
-                               internalStatus === "failed"   ? ["pending"] : [];
+  const validFrom: string[] =
+    internalStatus === "expired"  ? ["pending"] :
+    internalStatus === "canceled" ? ["pending"] :
+    internalStatus === "failed"   ? ["pending"] : [];
 
   if (validFrom.length > 0) {
     await supabaseAdmin
       .from("catalog_orders")
-      .update({
-        status: internalStatus,
-        gateway_status: String(remote.transaction_status),
-      })
+      .update({ status: internalStatus, gateway_status: rawStatus })
       .eq("id", order.id)
       .in("status", validFrom);
   }
@@ -337,8 +325,8 @@ export async function countProductOrders(productId: string): Promise<number> {
 }
 
 /**
- * Batalkan pesanan secara eksplisit (dipakai tombol Batal / navigasi keluar).
- * Membatalkan transaksi di Midtrans dan mengupdate status pesanan di Supabase menjadi 'canceled'.
+ * Batalkan pesanan secara eksplisit (navigasi keluar / tombol batal).
+ * DOKU tidak memiliki cancel API di sandbox; cukup update status DB saja.
  */
 export async function cancelOrder(
   code: string,
@@ -359,47 +347,20 @@ export async function cancelOrder(
   if (!order) {
     return { ok: false, status: "not_found", message: "Pesanan tidak ditemukan." };
   }
-
-  // Jika sudah lunas, tidak boleh dibatalkan
   if (order.status === "paid") {
     return { ok: false, status: "paid", message: "Pesanan sudah lunas, tidak dapat dibatalkan." };
   }
-
-  // Jika sudah berstatus canceled sebelumnya
   if (order.status === "canceled") {
     return { ok: true, status: "canceled", message: "Pesanan sudah dibatalkan sebelumnya." };
   }
 
-  // 1. Batalkan di gateway Midtrans jika pesanan berbayar
-  if (order.order_type === "paid" && order.order_code) {
-    try {
-      await cancelTransaction(order.order_code);
-    } catch (err) {
-      console.error(`[cancelOrder] Gagal membatalkan transaksi Midtrans ${order.order_code}:`, err);
-    }
-
-    // Batalkan juga transaksi auxiliary jika metode lain pernah digenerate
-    if (order.qr_string && order.qr_string.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(order.qr_string);
-        if (parsed.methods && typeof parsed.methods === "object") {
-          for (const m of Object.keys(parsed.methods)) {
-            if (m !== "qris") {
-              await cancelTransaction(`${order.order_code}-${m}`).catch(() => {});
-            }
-          }
-        }
-      } catch {}
-    }
-  }
-
-  // 2. Update status di Supabase menjadi 'canceled'
+  // Update status di Supabase menjadi 'canceled'
   const { data: updated, error } = await supabaseAdmin
     .from("catalog_orders")
     .update({
-      status: "canceled",
-      gateway_status: "cancel",
-      updated_at: new Date().toISOString(),
+      status:         "canceled",
+      gateway_status: "CANCELED",
+      updated_at:     new Date().toISOString(),
     })
     .eq("id", order.id)
     .in("status", ["pending"])
@@ -423,7 +384,7 @@ export interface SwitchPaymentResult {
 }
 
 /**
- * Ganti metode pembayaran di halaman checkout (QRIS, VA, atau Gerai Retail).
+ * Ganti metode pembayaran di halaman checkout (QRIS atau Virtual Account).
  * Mendukung caching agar tidak merequest ulang jika channel sudah pernah digenerate.
  */
 export async function switchOrderPaymentMethod(
@@ -433,19 +394,12 @@ export async function switchOrderPaymentMethod(
 ): Promise<SwitchPaymentResult> {
   const order = await loadOrder(code, token);
   if (!order) {
-    return {
-      ok: false,
-      paymentMethod: newMethod,
-      paymentDetails: { method: newMethod },
-      error: "Pesanan tidak ditemukan.",
-    };
+    return { ok: false, paymentMethod: newMethod, paymentDetails: { method: newMethod }, error: "Pesanan tidak ditemukan." };
   }
 
   if (order.status !== "pending") {
     return {
-      ok: false,
-      paymentMethod: newMethod,
-      paymentDetails: { method: newMethod },
+      ok: false, paymentMethod: newMethod, paymentDetails: { method: newMethod },
       error: `Pesanan berstatus ${order.status}. Tidak dapat mengganti metode pembayaran.`,
     };
   }
@@ -465,126 +419,125 @@ export async function switchOrderPaymentMethod(
         }
       } catch {}
     } else {
-      cachedMethods["qris"] = {
-        method: "qris",
-        qrString: order.qr_string,
-      };
+      cachedMethods["qris"] = { method: "qris", qrString: order.qr_string };
     }
   }
 
-  // Jika channel ini sudah pernah digenerate, gunakan data cache langsung
+  // Jika channel ini sudah pernah digenerate, gunakan data cache
   if (cachedMethods[newMethod]) {
-    const details = cachedMethods[newMethod];
+    const details    = cachedMethods[newMethod];
     let qrDataUrl: string | null = null;
     if (newMethod === "qris" && details.qrString) {
       const QRCode = (await import("qrcode")).default;
       qrDataUrl = await QRCode.toDataURL(details.qrString, {
-        margin: 2,
-        width: 280,
-        errorCorrectionLevel: "M",
+        margin: 2, width: 280, errorCorrectionLevel: "M",
         color: { dark: "#000000", light: "#FFFFFF" },
       }).catch(() => null);
     }
-
-    const payloadToStore = JSON.stringify({
-      activeMethod: newMethod,
-      activeDetails: details,
-      methods: cachedMethods,
-    });
 
     await supabaseAdmin
       .from("catalog_orders")
       .update({
         gateway_payment_type: newMethod,
-        qr_string: payloadToStore,
-        updated_at: new Date().toISOString(),
+        qr_string:            JSON.stringify({ activeMethod: newMethod, activeDetails: details, methods: cachedMethods }),
+        updated_at:           new Date().toISOString(),
       })
       .eq("id", order.id);
 
-    return {
-      ok: true,
-      paymentMethod: newMethod,
-      paymentDetails: details,
-      qrDataUrl,
-      message: "Metode pembayaran berhasil diaktifkan.",
-    };
+    return { ok: true, paymentMethod: newMethod, paymentDetails: details, qrDataUrl, message: "Metode pembayaran berhasil diaktifkan." };
   }
 
-  // Jika belum ada di cache, charge ke Midtrans dengan sub-ID
-  const midtransOrderId = `${order.order_code}-${newMethod}`;
-  let chargeRes: Record<string, unknown>;
+  // Belum ada di cache → charge ke DOKU dengan sub-ID
+  const dokuOrderId = `${order.order_code}-${newMethod}`;
+  const dokuChannel = paymentMethodToDokuChannel(newMethod);
+
+  let chargeResult: Awaited<ReturnType<typeof chargeDoku>>;
   try {
-    chargeRes = await chargePayment({
-      orderCode: midtransOrderId,
-      amount: order.amount_idr,
-      name: order.buyer_name,
-      email: order.buyer_email,
-      title: order.product_title,
-      minutes: catalogConfig.paymentExpiryMinutes,
-      paymentMethod: newMethod,
+    chargeResult = await chargeDoku({
+      orderCode:     dokuOrderId,
+      amountIdr:     order.amount_idr,
+      buyerName:     order.buyer_name,
+      buyerEmail:    order.buyer_email,
+      productTitle:  order.product_title,
+      expiryMinutes: catalogConfig.paymentExpiryMinutes,
+      channel:       dokuChannel,
     });
   } catch (err) {
-    console.error(`[switchOrderPaymentMethod] Charge error (${newMethod}):`, err);
+    console.error(`[switchOrderPaymentMethod] DOKU Charge error (${newMethod}):`, err);
+    return { ok: false, paymentMethod: newMethod, paymentDetails: { method: newMethod }, error: "Pembayaran channel ini sedang tidak tersedia di gateway." };
+  }
+
+  if (!chargeResult.ok) {
     return {
-      ok: false,
-      paymentMethod: newMethod,
-      paymentDetails: { method: newMethod },
-      error: "Pembayaran channel ini sedang tidak tersedia di gateway.",
+      ok: false, paymentMethod: newMethod, paymentDetails: { method: newMethod },
+      error: chargeResult.errorMessage || "Gagal mengaktifkan channel pembayaran.",
     };
   }
 
-  const statusCode = String(chargeRes.status_code ?? "");
-  const details = extractPaymentDetails(chargeRes, newMethod);
-  const hasPayload =
-    newMethod === "qris"
-      ? Boolean(details.qrString)
-      : Boolean(details.vaNumber || details.billKey || details.paymentCode);
-
-  if (statusCode !== "201" || !hasPayload) {
-    return {
-      ok: false,
-      paymentMethod: newMethod,
-      paymentDetails: details,
-      error: (chargeRes.status_message as string) || "Gagal mengaktifkan channel pembayaran.",
-    };
-  }
-
+  const details = dokuResultToPaymentDetails(chargeResult, newMethod);
   cachedMethods[newMethod] = details;
 
   let qrDataUrl: string | null = null;
   if (newMethod === "qris" && details.qrString) {
     const QRCode = (await import("qrcode")).default;
     qrDataUrl = await QRCode.toDataURL(details.qrString, {
-      margin: 2,
-      width: 280,
-      errorCorrectionLevel: "M",
+      margin: 2, width: 280, errorCorrectionLevel: "M",
       color: { dark: "#000000", light: "#FFFFFF" },
     }).catch(() => null);
   }
 
-  const payloadToStore = JSON.stringify({
-    activeMethod: newMethod,
-    activeDetails: details,
-    methods: cachedMethods,
-  });
-
   await supabaseAdmin
     .from("catalog_orders")
     .update({
-      gateway_payment_type: newMethod,
-      gateway_transaction_id: (chargeRes.transaction_id as string) ?? order.gateway_transaction_id,
-      qr_string: payloadToStore,
-      updated_at: new Date().toISOString(),
+      gateway_payment_type:   newMethod,
+      gateway_transaction_id: chargeResult.invoiceNumber,
+      qr_string:              JSON.stringify({ activeMethod: newMethod, activeDetails: details, methods: cachedMethods }),
+      updated_at:             new Date().toISOString(),
     })
     .eq("id", order.id);
 
+  return { ok: true, paymentMethod: newMethod, paymentDetails: details, qrDataUrl, message: "Metode pembayaran berhasil diaktifkan." };
+}
+
+// ─── Helper: konversi PaymentMethod → DokuPaymentChannel ─────────────────
+
+function paymentMethodToDokuChannel(method: PaymentMethod): DokuPaymentChannel {
+  switch (method) {
+    case "bca_va":      return "VIRTUAL_ACCOUNT_BCA";
+    case "bni_va":      return "VIRTUAL_ACCOUNT_BNI";
+    case "bri_va":      return "VIRTUAL_ACCOUNT_BRI";
+    case "mandiri_bill": return "VIRTUAL_ACCOUNT_MANDIRI";
+    case "permata_va":  return "VIRTUAL_ACCOUNT_PERMATA";
+    case "qris":
+    default:           return "QRIS";
+  }
+}
+
+// ─── Helper: konversi DokuChargeResult → PaymentDetails ──────────────────
+
+function dokuResultToPaymentDetails(
+  result: Awaited<ReturnType<typeof chargeDoku>>,
+  method: PaymentMethod,
+): PaymentDetails {
+  if (method === "qris") {
+    return { method: "qris", qrString: result.qrString ?? null };
+  }
+  if (method === "mandiri_bill") {
+    // DOKU Mandiri VA: va_number digunakan sebagai bill_key
+    return {
+      method:      "mandiri_bill",
+      billKey:     result.vaNumber ?? null,
+      billerCode:  "70012",
+      bank:        "MANDIRI",
+    };
+  }
+  // Semua VA lainnya
   return {
-    ok: true,
-    paymentMethod: newMethod,
-    paymentDetails: details,
-    qrDataUrl,
-    message: "Metode pembayaran berhasil diaktifkan.",
+    method,
+    vaNumber: result.vaNumber ?? null,
+    bank:     result.bank ?? method.replace("_va", "").toUpperCase(),
   };
 }
 
-
+// Re-export getDokuStatus agar dipakai oleh orders/check route
+export { getDokuStatus, isDokuSandbox };

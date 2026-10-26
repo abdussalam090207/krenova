@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 // Halaman pesanan: noindex, no-store, no-referrer
 export const metadata: Metadata = {
-  title: "Pesanan — KRENOVA STUDIO",
+  title: "Pesanan",
   robots: { index: false, follow: false },
 };
 
