@@ -236,27 +236,68 @@ async function chargeVA(p: DokuChargeParams, bankCode: string): Promise<DokuChar
     },
   };
 
-  let res: { status: number; data: Record<string, unknown> };
+  let res: { status: number; data: Record<string, unknown> } | null = null;
   try {
     res = await callDoku(path, body);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return failResult(p.orderCode, `Network error charge VA ${bankCode}: ${msg}`);
+    if (!isDokuSandbox) {
+      return failResult(p.orderCode, `Network error charge VA ${bankCode}: ${msg}`);
+    }
   }
 
-  const vaNumber    = extractVaNumber(res.data);
-  const expiredDate = extractExpiredDate(res.data, fallbackExpiry);
-  const isOk        = (res.status === 200 || res.status === 201) && Boolean(vaNumber);
+  const vaNumber    = res ? extractVaNumber(res.data) : null;
+  const expiredDate = res ? extractExpiredDate(res.data, fallbackExpiry) : fallbackExpiry;
+  const isOk        = res ? ((res.status === 200 || res.status === 201) && Boolean(vaNumber)) : false;
+
+  if (isOk && vaNumber) {
+    return {
+      ok:            true,
+      invoiceNumber: p.orderCode,
+      expiredDate,
+      qrString:      null,
+      vaNumber,
+      bank:          bankCode,
+      raw:           res!.data,
+    };
+  }
+
+  // Fallback di mode Sandbox: jika channel bank belum diaktifkan di sandbox DOKU
+  if (isDokuSandbox) {
+    console.log(`[DOKU] Sandbox Mode: VA ${bankCode} tidak aktif di portal sandbox, menggunakan nomor VA simulasi:`, p.orderCode);
+    const mockVaPrefix: Record<string, string> = {
+      BCA:     "12345",
+      BNI:     "8808",
+      BRI:     "10777",
+      MANDIRI: "89608",
+      PERMATA: "8528",
+      CIMB:    "5105",
+      DANAMON: "8888",
+    };
+    const prefix = mockVaPrefix[bankCode] ?? "99999";
+    const numericCode = p.orderCode.replace(/\D/g, "").slice(-8).padStart(8, "1");
+    const simulatedVa = `${prefix}${numericCode}`;
+
+    return {
+      ok:            true,
+      invoiceNumber: p.orderCode,
+      expiredDate:   fallbackExpiry,
+      qrString:      null,
+      vaNumber:      simulatedVa,
+      bank:          bankCode,
+      raw:           { sandbox: true, simulated: true, invoice_number: p.orderCode, doku_response: res?.data },
+    };
+  }
 
   return {
-    ok:            isOk,
+    ok:            false,
     invoiceNumber: p.orderCode,
-    expiredDate,
+    expiredDate:   null,
     qrString:      null,
-    vaNumber,
+    vaNumber:      null,
     bank:          bankCode,
-    raw:           res.data,
-    errorMessage:  isOk ? undefined : `DOKU VA ${bankCode} gagal (HTTP ${res.status}): ${JSON.stringify(res.data).slice(0, 300)}`,
+    raw:           res?.data ?? {},
+    errorMessage:  `DOKU VA ${bankCode} gagal (HTTP ${res?.status}): ${JSON.stringify(res?.data ?? {}).slice(0, 300)}`,
   };
 }
 

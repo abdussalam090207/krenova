@@ -18,14 +18,8 @@ export async function GET(req: NextRequest) {
   const order = await loadOrder(code, token);
   if (!order) return json({ error: "not_found" }, 404);
 
-  // Jika pesanan sudah paid namun email belum terkirim, picu pengiriman
-  if (order.status === "paid" && (!order.email_buyer_sent_at || !order.email_admin_sent_at)) {
-    import("@/lib/server/email")
-      .then(({ onOrderPaid }) => onOrderPaid(order))
-      .catch((err) => console.error("[order-status] Email dispatch error:", err));
-  }
-
-  // Hanya kembalikan status dan expiresAt — tidak ada data produk/pembeli
+  // Kembalikan hanya status dan expiresAt — tanpa trigger email.
+  // Pengiriman email ditangani ATOMIK oleh: webhook DOKU atau orders/check saat transisi terjadi.
   return json({ status: order.status, expiresAt: order.expires_at });
 }
 

@@ -1,6 +1,6 @@
 "use client";
 // components/katalog/CheckoutDialog.tsx — Dialog beli / dapatkan gratis
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { CatalogProduct } from "@/lib/catalog/types";
 import { catalogConfig } from "@/config/catalog";
@@ -22,17 +22,23 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
   const [accepted, setAccepted] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const submittedRef = useRef(false); // Guard: cegah double-submit meski klik cepat atau concurrent
   const [tOpen] = useState(() => Date.now());
 
   // Kunci scroll body dan tangani Escape saat modal terbuka
   useEffect(() => {
     if (!open) return;
 
+    // Reset status guard saat modal dibuka
+    submittedRef.current = false;
+    setSubmitting(false);
+    setErrors({});
+
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !submittedRef.current) {
         onClose();
       }
     };
@@ -52,8 +58,14 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
     return null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard pertama: cegah double-submit dari state React
+    if (submitting) return;
+    // Guard kedua: cegah double-submit dari Ref (sebelum React re-render)
+    if (submittedRef.current) return;
+
     const errs: FieldErrors = {};
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
@@ -65,6 +77,8 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
       errs.acceptTerms = "Kamu harus menyetujui syarat.";
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
+    // Kunci segera — sebelum await apapun
+    submittedRef.current = true;
     setSubmitting(true);
     setErrors({});
 
@@ -74,11 +88,11 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug: product.slug,
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
+          name: trimmedName,
+          email: trimmedEmail.toLowerCase(),
           acceptTerms: accepted,
           paymentMethod: "qris",
-          website: "",   // honeypot kosong
+          website: "",  // honeypot kosong
           t: tOpen,
         }),
       });
@@ -86,9 +100,14 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
       const data = await res.json();
 
       if (res.ok && data.redirectTo) {
+        // Redirect sukses: biarkan tombol tetap disabled hingga halaman berganti
         router.push(data.redirectTo);
         return;
       }
+
+      // Error: buka kunci agar user bisa coba lagi
+      submittedRef.current = false;
+
       if (res.status === 429) {
         setErrors({ _global: "Terlalu banyak percobaan. Coba lagi nanti." });
       } else if (res.status === 502) {
@@ -99,11 +118,13 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
         setErrors({ _global: "Terjadi kesalahan. Coba lagi." });
       }
     } catch {
+      submittedRef.current = false;
       setErrors({ _global: "Koneksi bermasalah. Coba lagi." });
     } finally {
-      setSubmitting(false);
+      // Hanya reset submitting jika ref sudah dilepas (artinya ada error)
+      if (!submittedRef.current) setSubmitting(false);
     }
-  }
+  }, [submitting, name, email, accepted, product.slug, tOpen, router]);
 
   const isFree = product.purchase_mode === "free";
   const ctaText = isFree ? "Dapatkan sekarang" : "Lanjut ke pembayaran";
@@ -143,8 +164,9 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
+            disabled={submitting}
             aria-label="Tutup"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-text-3 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition-all cursor-pointer -mr-1 -mt-1 shrink-0"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-text-3 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition-all cursor-pointer -mr-1 -mt-1 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M18 6 6 18M6 6l12 12" />
@@ -174,13 +196,14 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
               ref={firstRef}
               type="text"
               required
+              disabled={submitting}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={80}
               autoComplete="name"
               placeholder="Nama kamu"
               className={`w-full px-4 py-3 rounded-2xl text-sm bg-white/[0.06] border transition-all text-text
-                placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] ${errors.name ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
+                placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] disabled:opacity-60 disabled:cursor-not-allowed ${errors.name ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
                 }`}
             />
             {errors.name && <p className="mt-1.5 text-xs text-rose">{errors.name}</p>}
@@ -195,13 +218,14 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
               id="co-email"
               type="email"
               required
+              disabled={submitting}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               maxLength={254}
               autoComplete="email"
               placeholder="email@kamu.com"
               className={`w-full px-4 py-3 rounded-2xl text-sm bg-white/[0.06] border transition-all text-text
-                placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] ${errors.email ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
+                placeholder:text-text-3 focus:outline-none focus:bg-white/[0.10] disabled:opacity-60 disabled:cursor-not-allowed ${errors.email ? "border-rose/60 focus:border-rose" : "border-white/15 focus:border-blue/60"
                 }`}
             />
             {errors.email && <p className="mt-1.5 text-xs text-rose">{errors.email}</p>}
@@ -216,9 +240,10 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
               <input
                 type="checkbox"
                 id="co-terms"
+                disabled={submitting}
                 checked={accepted}
                 onChange={(e) => setAccepted(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded-2xl accent-blue flex-shrink-0 cursor-pointer"
+                className="mt-0.5 w-4 h-4 rounded-2xl accent-blue flex-shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <span className="text-xs text-text-2 leading-relaxed">
                 Saya menyetujui{" "}
@@ -247,11 +272,25 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
           <div className="pt-2">
             <button
               type="submit"
+              id="checkout-submit-btn"
               disabled={submitting}
-              className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-text cursor-pointer
-               glass-strong border border-white/20"
+              aria-busy={submitting}
+              aria-label={submitting ? "Sedang memproses pesanan…" : ctaText}
+              className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm text-text glass-strong border border-white/20 transition-all duration-200
+                ${ submitting
+                  ? "opacity-60 cursor-not-allowed pointer-events-none select-none"
+                  : "cursor-pointer hover:opacity-90 active:scale-[0.99]"
+                }`}
             >
-              {submitting ? "Memproses…" : ctaText}
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Memproses…
+                </span>
+              ) : ctaText}
             </button>
           </div>
         </form>

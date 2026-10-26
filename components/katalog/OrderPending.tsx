@@ -178,33 +178,8 @@ export function OrderPending({
     };
   }, [checkStatus, expiresAt]);
 
-  // Auto-cancel saat user menutup tab, undo page browser, atau meninggalkan halaman (beforeunload, pagehide, popstate)
-  useEffect(() => {
-    const handleUnload = () => {
-      if (!beaconActiveRef.current || stoppedRef.current) return;
-      const payload = JSON.stringify({ code: orderCode, t: token });
-      if (navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon("/api/orders/cancel", blob);
-      } else {
-        fetch("/api/orders/cancel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payload,
-          keepalive: true,
-        });
-      }
-    };
-
-    // Auto-cancel saat user menutup tab / navigasi keluar
-    window.addEventListener("beforeunload", handleUnload);
-    window.addEventListener("popstate", handleUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-      window.removeEventListener("popstate", handleUnload);
-    };
-  }, [orderCode, token]);
+  // Catatan: Pembatalan pesanan dilakukan secara eksplisit melalui OrderBackButton (dengan konfirmasi dialog).
+  // Menghindari auto-cancel saat reload halaman atau saat pembeli berpindah ke aplikasi m-banking di smartphone.
 
   // Ganti metode pembayaran dinamis dari dropdown Liquid Glass di bawah
   async function handleSwitchPayment(newMethod: PaymentMethod) {
