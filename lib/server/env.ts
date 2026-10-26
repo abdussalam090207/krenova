@@ -21,9 +21,18 @@ export const env = {
   MIDTRANS_SERVER_KEY:   process.env.MIDTRANS_SERVER_KEY ?? "",
   MIDTRANS_IS_PRODUCTION: process.env.MIDTRANS_IS_PRODUCTION === "true",
   // DOKU Direct API
+  // Catatan: validasi ketat (runtime error) dilakukan di lib/server/doku.ts saat fungsi dipanggil,
+  // bukan di sini, agar build Next.js tidak gagal saat env belum tersedia di CI.
   DOKU_CLIENT_ID:        process.env.DOKU_CLIENT_ID ?? "",
   DOKU_SECRET_KEY:       process.env.DOKU_SECRET_KEY ?? "",
-  DOKU_BASE_URL:         process.env.DOKU_BASE_URL ?? "https://api-sandbox.doku.com",
+  // DOKU_BASE_URL: production = api.doku.com, sandbox = api-sandbox.doku.com
+  DOKU_BASE_URL: (() => {
+    const isProduction = process.env.DOKU_IS_PRODUCTION === "true";
+    const raw = (process.env.DOKU_BASE_URL ?? "").trim();
+    if (raw) return raw.replace(/\/+$/, "");
+    // Jika DOKU_IS_PRODUCTION=true tapi DOKU_BASE_URL tidak diisi, paksa production URL
+    return isProduction ? "https://api.doku.com" : "https://api-sandbox.doku.com";
+  })(),
   DOKU_IS_PRODUCTION:    process.env.DOKU_IS_PRODUCTION === "true",
   RESEND_API_KEY:        requireEnv("RESEND_API_KEY"),
   EMAIL_FROM:            requireEnv("EMAIL_FROM"),

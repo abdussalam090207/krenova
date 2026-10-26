@@ -1,17 +1,24 @@
-// lib/server/doku.ts — Helper DOKU Direct API: Signature HMAC-SHA256, Charge, Status
+// lib/server/doku.ts â€” Helper DOKU Direct API: Signature HMAC-SHA256, Charge, Status
 import "server-only";
 import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 
-// ─── Konfigurasi dari env ─────────────────────────────────────────────────
+// â”€â”€â”€ Konfigurasi dari env â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const CLIENT_ID  = process.env.DOKU_CLIENT_ID  ?? "";
 const SECRET_KEY = process.env.DOKU_SECRET_KEY ?? "";
-const BASE_URL   = (process.env.DOKU_BASE_URL  ?? "https://api-sandbox.doku.com").replace(/\/+$/, "");
 const IS_PROD    = process.env.DOKU_IS_PRODUCTION === "true";
+
+// BASE_URL: production = api.doku.com, sandbox = api-sandbox.doku.com
+// Wajib di-set lewat env var DOKU_BASE_URL agar tidak ada hardcoded URL
+const BASE_URL = (() => {
+  const raw = (process.env.DOKU_BASE_URL ?? "").trim();
+  if (raw) return raw.replace(/\/+$/, "");
+  return IS_PROD ? "https://api.doku.com" : "https://api-sandbox.doku.com";
+})();
 
 export const isDokuSandbox = !IS_PROD;
 
-// ─── Tipe Publik ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Tipe Publik â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type DokuPaymentChannel =
   | "QRIS"
@@ -52,7 +59,7 @@ export interface DokuStatusResult {
   raw:               Record<string, unknown>;
 }
 
-// ─── HMAC-SHA256 Signature (Standar DOKU Direct / Jokul API) ─────────────
+// â”€â”€â”€ HMAC-SHA256 Signature (Standar DOKU Direct / Jokul API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Digest = Base64( SHA-256(requestBody) )
@@ -130,7 +137,16 @@ export function buildDokuHeaders(requestTarget: string, bodyJson?: string): Reco
   return headers;
 }
 
-// ─── Verifikasi Signature Webhook dari DOKU ───────────────────────────────
+// â”€â”€â”€ Verifikasi Signature Webhook dari DOKU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/**
+ * Verifikasi signature webhook dari DOKU.
+ * Menggunakan timingSafeEqual untuk mencegah timing attack.
+ * Menolak request jika timestamp lebih dari MAX_WEBHOOK_AGE_MS (5 menit) â€” anti replay attack.
+ */
+
+/** Maksimum usia webhook yang diterima: 5 menit */
+const MAX_WEBHOOK_AGE_MS = 5 * 60 * 1000;
 
 export function verifyDokuWebhookSignature(params: {
   clientId:           string;
@@ -141,6 +157,19 @@ export function verifyDokuWebhookSignature(params: {
   incomingSignature:  string;
 }): boolean {
   try {
+    // â”€â”€ 1. Validasi Client-Id â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    if (!params.clientId || params.clientId !== CLIENT_ID) return false;
+
+    // â”€â”€ 2. Replay attack prevention: tolak jika timestamp terlalu lama â”€â”€â”€â”€
+    if (params.requestTimestamp) {
+      const tsMs = new Date(params.requestTimestamp).getTime();
+      if (!Number.isNaN(tsMs) && Math.abs(Date.now() - tsMs) > MAX_WEBHOOK_AGE_MS) {
+        console.warn(`[DOKU Webhook] Ditolak: timestamp terlalu lama (${params.requestTimestamp})`);
+        return false;
+      }
+    }
+
+    // â”€â”€ 3. Hitung & bandingkan signature â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const target   = params.requestTarget || "/api/webhooks/doku";
     const digest   = buildDigest(params.bodyJson);
     const expected = buildSignature({
@@ -159,12 +188,20 @@ export function verifyDokuWebhookSignature(params: {
   }
 }
 
-// ─── Helper fetch ke DOKU API ─────────────────────────────────────────────
+// â”€â”€â”€ Helper fetch ke DOKU API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function callDoku(
   path: string,
   body: Record<string, unknown>,
 ): Promise<{ status: number; data: Record<string, unknown> }> {
+  // Validasi kredensial saat runtime (agar build tetap berhasil meski env belum ada)
+  if (!CLIENT_ID || !SECRET_KEY) {
+    const ctx = IS_PROD ? "PRODUCTION" : "SANDBOX";
+    throw new Error(
+      `[DOKU ${ctx}] DOKU_CLIENT_ID dan DOKU_SECRET_KEY wajib diisi di environment variables. ` +
+      `Tambahkan ke .env.local (dev) atau Vercel Environment Variables (prod).`,
+    );
+  }
   const bodyJson = JSON.stringify(body);
   const headers  = buildDokuHeaders(path, bodyJson);
   const url      = `${BASE_URL}${path}`;
@@ -191,7 +228,7 @@ async function callDoku(
   return { status: res.status, data };
 }
 
-// ─── Virtual Account Paths (DOKU Direct API) ──────────────────────────────
+// â”€â”€â”€ Virtual Account Paths (DOKU Direct API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const VA_PATHS: Record<string, string> = {
   BCA:     "/bca-virtual-account/v2/payment-code",
@@ -203,7 +240,7 @@ const VA_PATHS: Record<string, string> = {
   DANAMON: "/danamon-virtual-account/v2/payment-code",
 };
 
-// ─── Charge Virtual Account ───────────────────────────────────────────────
+// â”€â”€â”€ Charge Virtual Account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function chargeVA(p: DokuChargeParams, bankCode: string): Promise<DokuChargeResult> {
   const fallbackExpiry = new Date(Date.now() + p.expiryMinutes * 60_000)
@@ -262,46 +299,41 @@ async function chargeVA(p: DokuChargeParams, bankCode: string): Promise<DokuChar
     };
   }
 
-  // Fallback di mode Sandbox: jika channel bank belum diaktifkan di sandbox DOKU
-  if (isDokuSandbox) {
-    console.log(`[DOKU] Sandbox Mode: VA ${bankCode} tidak aktif di portal sandbox, menggunakan nomor VA simulasi:`, p.orderCode);
-    const mockVaPrefix: Record<string, string> = {
-      BCA:     "12345",
-      BNI:     "8808",
-      BRI:     "10777",
-      MANDIRI: "89608",
-      PERMATA: "8528",
-      CIMB:    "5105",
-      DANAMON: "8888",
-    };
-    const prefix = mockVaPrefix[bankCode] ?? "99999";
-    const numericCode = p.orderCode.replace(/\D/g, "").slice(-8).padStart(8, "1");
-    const simulatedVa = `${prefix}${numericCode}`;
-
-    return {
-      ok:            true,
-      invoiceNumber: p.orderCode,
-      expiredDate:   fallbackExpiry,
-      qrString:      null,
-      vaNumber:      simulatedVa,
-      bank:          bankCode,
-      raw:           { sandbox: true, simulated: true, invoice_number: p.orderCode, doku_response: res?.data },
-    };
+  // PRODUCTION: tidak ada fallback simulasi â€” gagal dengan pesan jelas
+  if (IS_PROD) {
+    return failResult(
+      p.orderCode,
+      `DOKU VA ${bankCode} gagal (HTTP ${res?.status}): ${JSON.stringify(res?.data ?? {}).slice(0, 300)}`,
+    );
   }
 
+  // SANDBOX ONLY: jika channel bank belum diaktifkan di sandbox DOKU, gunakan VA simulasi
+  console.log(`[DOKU] Sandbox Mode: VA ${bankCode} tidak aktif di portal sandbox, menggunakan nomor VA simulasi:`, p.orderCode);
+  const mockVaPrefix: Record<string, string> = {
+    BCA:     "12345",
+    BNI:     "8808",
+    BRI:     "10777",
+    MANDIRI: "89608",
+    PERMATA: "8528",
+    CIMB:    "5105",
+    DANAMON: "8888",
+  };
+  const prefix = mockVaPrefix[bankCode] ?? "99999";
+  const numericCode = p.orderCode.replace(/\D/g, "").slice(-8).padStart(8, "1");
+  const simulatedVa = `${prefix}${numericCode}`;
+
   return {
-    ok:            false,
+    ok:            true,
     invoiceNumber: p.orderCode,
-    expiredDate:   null,
+    expiredDate:   fallbackExpiry,
     qrString:      null,
-    vaNumber:      null,
+    vaNumber:      simulatedVa,
     bank:          bankCode,
-    raw:           res?.data ?? {},
-    errorMessage:  `DOKU VA ${bankCode} gagal (HTTP ${res?.status}): ${JSON.stringify(res?.data ?? {}).slice(0, 300)}`,
+    raw:           { sandbox: true, simulated: true, invoice_number: p.orderCode, doku_response: res?.data },
   };
 }
 
-// ─── Charge QRIS ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Charge QRIS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
   const fallbackExpiry = new Date(Date.now() + p.expiryMinutes * 60_000)
@@ -343,27 +375,28 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
     console.warn("[DOKU] Charge QRIS direct attempt error:", err);
   }
 
-  // Jika di mode Sandbox dan QRIS tidak aktif di DOKU:
-  // Buat mock QRIS EMV string resmi agar pengujian lokal & simulasi lancar
-  if (isDokuSandbox) {
-    console.log("[DOKU] Sandbox Mode: Menggunakan mock QRIS string untuk simulasi:", p.orderCode);
-    const mockQr = `00020101021226580014ID.LINKAJA.WWW01189360091100222830840208102228300303UMI51440014ID.DOKU.WWW02150000000000000000303UMI520458125303360540${p.amountIdr.toString().length}${p.amountIdr}5802ID5914KRENOVA STUDIO6007BANDUNG61054011562200716${p.orderCode.slice(0, 16)}6304ABCD`;
-
-    return {
-      ok:            true,
-      invoiceNumber: p.orderCode,
-      expiredDate:   fallbackExpiry,
-      qrString:      mockQr,
-      vaNumber:      null,
-      bank:          null,
-      raw:           { sandbox: true, simulated: true, invoice_number: p.orderCode },
-    };
+  // PRODUCTION: tidak ada fallback simulasi â€” gagal dengan pesan jelas
+  if (IS_PROD) {
+    return failResult(p.orderCode, "Channel QRIS belum diaktifkan di akun DOKU Production Anda. Pastikan QRIS aktif di merchant dashboard DOKU.");
   }
 
-  return failResult(p.orderCode, "Channel QRIS belum diaktifkan di akun DOKU Anda.");
+  // SANDBOX ONLY: Buat mock QRIS EMV string agar pengujian lokal & simulasi lancar
+  console.log("[DOKU] Sandbox Mode: Menggunakan mock QRIS string untuk simulasi:", p.orderCode);
+  const mockQr = `00020101021226580014ID.LINKAJA.WWW01189360091100222830840208102228300303UMI51440014ID.DOKU.WWW02150000000000000000303UMI520458125303360540${p.amountIdr.toString().length}${p.amountIdr}5802ID5914KRENOVA STUDIO6007BANDUNG61054011562200716${p.orderCode.slice(0, 16)}6304ABCD`;
+
+  return {
+    ok:            true,
+    invoiceNumber: p.orderCode,
+    expiredDate:   fallbackExpiry,
+    qrString:      mockQr,
+    vaNumber:      null,
+    bank:          null,
+    raw:           { sandbox: true, simulated: true, invoice_number: p.orderCode },
+  };
 }
 
-// ─── Fungsi Utama: chargeDoku ─────────────────────────────────────────────
+
+// â”€â”€â”€ Fungsi Utama: chargeDoku â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function chargeDoku(p: DokuChargeParams): Promise<DokuChargeResult> {
   switch (p.channel) {
@@ -379,7 +412,7 @@ export async function chargeDoku(p: DokuChargeParams): Promise<DokuChargeResult>
   }
 }
 
-// ─── Cek Status Transaksi DOKU ────────────────────────────────────────────
+// â”€â”€â”€ Cek Status Transaksi DOKU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function getDokuStatus(invoiceNumber: string): Promise<DokuStatusResult> {
   const requestTarget = `/orders/v1/status/${encodeURIComponent(invoiceNumber)}`;
@@ -435,7 +468,7 @@ export async function getDokuStatus(invoiceNumber: string): Promise<DokuStatusRe
   }
 }
 
-// ─── Batalkan Pesanan di DOKU (Cancel Order API) ──────────────────────────
+// â”€â”€â”€ Batalkan Pesanan di DOKU (Cancel Order API) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function cancelDokuOrder(invoiceNumber: string): Promise<{
   ok: boolean;
@@ -471,7 +504,7 @@ export async function cancelDokuOrder(invoiceNumber: string): Promise<{
   }
 }
 
-// ─── Ekstraksi Field dari Respons DOKU ────────────────────────────────────
+// â”€â”€â”€ Ekstraksi Field dari Respons DOKU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function extractQrString(raw: Record<string, unknown>): string | null {
   const payment    = raw.payment    as Record<string, unknown> | undefined;
