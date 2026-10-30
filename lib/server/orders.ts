@@ -127,13 +127,13 @@ export async function createOrder(input: CreateOrderInput): Promise<{
 
     // Jika channel QRIS gagal (belum diaktifkan oleh BI/ASPI atau akun belum approved),
     // otomatis fallback ke channel VA yang aktif agar checkout tidak terputus.
-    // Urutan fallback berdasarkan hasil test live production: BRI → CIMB → DANAMON
+    // Jika channel QRIS gagal, fallback ke Virtual Account aktif (BRI/BNI/Mandiri)
     if (!chargeResult.ok && dokuChannel === "QRIS") {
       console.warn(`[createOrder] Charge QRIS gagal (${chargeResult.errorMessage}). Mencoba fallback ke Virtual Account aktif...`);
       const vaFallbackChannels: Array<{ channel: DokuPaymentChannel; method: PaymentMethod }> = [
         { channel: "VIRTUAL_ACCOUNT_BRI",     method: "bri_va" },
-        { channel: "VIRTUAL_ACCOUNT_CIMB",    method: "cimb_va" },
-        { channel: "VIRTUAL_ACCOUNT_DANAMON", method: "danamon_va" },
+        { channel: "VIRTUAL_ACCOUNT_BNI",     method: "bni_va" },
+        { channel: "VIRTUAL_ACCOUNT_MANDIRI", method: "mandiri_bill" },
       ];
       for (const fb of vaFallbackChannels) {
         try {

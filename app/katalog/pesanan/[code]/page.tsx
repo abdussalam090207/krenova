@@ -144,7 +144,7 @@ export default async function OrderPage({ params, searchParams }: PageProps) {
               amountIdr={order.amount_idr}
               qrDataUrl={qrDataUrl}
               paymentDetails={paymentDetails}
-              paymentMethod={order.gateway_payment_type || "bri_va"}
+              paymentMethod={order.gateway_payment_type || "qris"}
               expiresAt={order.expires_at}
               isSandbox={isSandbox}
             />

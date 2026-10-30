@@ -379,6 +379,39 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
   };
 
   let res: { status: number; data: Record<string, unknown> } | null = null;
+
+  // 1. Coba DOKU Direct QRIS API terlebih dahulu (/qris-http/v2/generate-qr-code)
+  try {
+    const directBody = {
+      order: {
+        invoice_number: p.orderCode,
+        amount:         p.amountIdr,
+      },
+      qris_info: {
+        expired_time: p.expiryMinutes,
+      },
+      additional_info: {
+        callback_url: WEBHOOK_URL,
+      },
+    };
+    res = await callDoku("/qris-http/v2/generate-qr-code", directBody);
+    const qrString = extractQrString(res.data);
+    if ((res.status === 200 || res.status === 201) && qrString) {
+      return {
+        ok:            true,
+        invoiceNumber: p.orderCode,
+        expiredDate:   extractExpiredDate(res.data, fallbackExpiry),
+        qrString,
+        vaNumber:      null,
+        bank:          null,
+        raw:           res.data,
+      };
+    }
+  } catch (err) {
+    console.warn("[DOKU] Charge Direct QRIS attempt error, trying checkout fallback:", err);
+  }
+
+  // 2. Fallback ke DOKU Checkout API (/checkout/v1/payment)
   try {
     res = await callDoku("/checkout/v1/payment", body);
     const qrString = extractQrString(res.data);
@@ -538,14 +571,18 @@ function extractQrString(raw: Record<string, unknown>): string | null {
   const payment    = (resp?.payment ?? raw.payment) as Record<string, unknown> | undefined;
   const payData    = (resp?.payment_data ?? raw.payment_data) as Record<string, unknown> | undefined;
   const qrResponse = (resp?.qr_response ?? raw.qr_response) as Record<string, unknown> | undefined;
+  const qrisInfo   = (resp?.qris_info ?? raw.qris_info) as Record<string, unknown> | undefined;
 
   const candidates = [
     // Direct QR string (EMVCo)
+    qrResponse?.qr_string,
+    qrResponse?.qr_content,
+    qrisInfo?.qr_string,
+    qrisInfo?.qr_content,
     payment?.qr_string,
     payment?.qr_code,
     payData?.qr_code,
     payData?.qr_string,
-    qrResponse?.qr_string,
     raw.qr_string,
     raw.qr_code,
     raw.qrContent,

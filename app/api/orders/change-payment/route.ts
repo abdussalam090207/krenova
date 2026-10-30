@@ -11,11 +11,9 @@ const json = (b: unknown, s = 200) => NextResponse.json(b, { status: s, headers:
 
 const VALID_METHODS = new Set<string>([
   "qris",
-  "bca_va",
-  "bni_va",
   "bri_va",
   "mandiri_bill",
-  "permata_va",
+  "bni_va",
   "indomaret",
   "alfamart",
 ]);

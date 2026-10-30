@@ -32,16 +32,11 @@ interface ReconcileFeedback {
 }
 
 const PAYMENT_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
-  // Channel aktif di DOKU production (urutan prioritas)
-  { value: "bri_va",     label: "BRI Virtual Account" },
-  { value: "cimb_va",   label: "CIMB Niaga Virtual Account" },
-  { value: "danamon_va", label: "Danamon Virtual Account" },
-  // Channel lain (aktifkan setelah approval DOKU)
+  // QRIS sebagai default utama
   { value: "qris",          label: "QRIS & E-Wallet" },
-  { value: "bca_va",        label: "BCA Virtual Account" },
+  { value: "bri_va",        label: "BRI Virtual Account" },
   { value: "mandiri_bill",  label: "Mandiri Bill" },
   { value: "bni_va",        label: "BNI Virtual Account" },
-  { value: "permata_va",    label: "Permata Virtual Account" },
 ];
 
 export function OrderPending({
@@ -51,7 +46,7 @@ export function OrderPending({
   amountIdr,
   qrDataUrl,
   paymentDetails,
-  paymentMethod = "bri_va",
+  paymentMethod = "qris",
   expiresAt,
   isSandbox,
 }: Props) {
@@ -62,7 +57,7 @@ export function OrderPending({
   const beaconActiveRef = useRef(true);
 
   // State metode pembayaran aktif & rincian pembayaran (mendukung pergantian dinamis)
-  const initialMethod = (paymentDetails?.method || (paymentMethod as PaymentMethod) || "bri_va");
+  const initialMethod = (paymentDetails?.method || (paymentMethod as PaymentMethod) || "qris");
   const [activeMethod, setActiveMethod] = useState<PaymentMethod>(initialMethod);
   const [currentDetails, setCurrentDetails] = useState<PaymentDetails | null>(paymentDetails ?? null);
   const [currentQrDataUrl, setCurrentQrDataUrl] = useState<string | null>(qrDataUrl ?? null);
@@ -360,13 +355,6 @@ export function OrderPending({
   );
   const waUrl = `https://wa.me/${catalogConfig.supportWhatsapp}?text=${waMsg}`;
 
-  // Simulator URL untuk Sandbox DOKU
-  let simulatorUrl = "https://sandbox.doku.com";
-  let simulatorLabel = "Simulator Pembayaran DOKU";
-  if (isVA || isMandiri) {
-    simulatorUrl = "https://sandbox.doku.com";
-    simulatorLabel = "Simulator Virtual Account DOKU";
-  }
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -376,15 +364,7 @@ export function OrderPending({
           <span className="font-semibold uppercase tracking-wider text-[10px] bg-yellow-400/20 px-1.5 py-0.5 rounded mr-1.5">
             Sandbox
           </span>
-          Uji pembayaran melalui{" "}
-          <a
-            href={simulatorUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline font-semibold text-yellow-200 hover:text-white transition-colors"
-          >
-            {simulatorLabel} →
-          </a>
+          Mode Pembayaran Uji Coba (Sandbox)
         </div>
       )}
 
@@ -422,19 +402,6 @@ export function OrderPending({
               <p className="text-xs text-text-2 leading-relaxed max-w-xs mx-auto">
                 Pindai QR ini dengan GoPay, OVO, DANA, ShopeePay, BCA, Livin&apos;, atau aplikasi perbankan apa saja.
               </p>
-
-              {currentDetails?.qrString?.startsWith("http") && (
-                <div className="pt-1">
-                  <a
-                    href={currentDetails.qrString}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold text-white bg-blue/80 hover:bg-blue border border-white/20 transition-all shadow-lg shadow-blue/25"
-                  >
-                    Buka Halaman Pembayaran DOKU →
-                  </a>
-                </div>
-              )}
             </div>
           ) : (
             <div className="p-8 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col items-center justify-center gap-3 relative z-10 animate-fade-in">

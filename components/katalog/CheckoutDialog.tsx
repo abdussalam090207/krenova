@@ -98,7 +98,7 @@ export function CheckoutDialog({ product, open, onClose }: Props) {
           name: trimmedName,
           email: trimmedEmail.toLowerCase(),
           acceptTerms: accepted,
-          paymentMethod: "bri_va",   // default ke BRI VA (aktif di production; QRIS belum aktif)
+          paymentMethod: "qris",   // default ke QRIS
           website: "",   // honeypot kosong
           t: tOpen,
         }),
