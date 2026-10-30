@@ -411,21 +411,64 @@ async function chargeQris(p: DokuChargeParams): Promise<DokuChargeResult> {
     console.warn("[DOKU] Charge Direct QRIS attempt error, trying checkout fallback:", err);
   }
 
-  // 2. Fallback ke DOKU Checkout API (/checkout/v1/payment)
+  // 2. DOKU Checkout API (/checkout/v1/payment) -> Dapatkan token_id, lalu generate real raw EMVCo QRIS string
   try {
     res = await callDoku("/checkout/v1/payment", body);
-    const qrString = extractQrString(res.data);
-    if ((res.status === 200 || res.status === 201) && qrString) {
+
+    // Cek jika res.data sudah memuat qrString raw EMVCo langsung
+    const directQr = extractQrString(res.data);
+    if ((res.status === 200 || res.status === 201) && directQr) {
       return {
         ok:            true,
         invoiceNumber: p.orderCode,
         expiredDate:   extractExpiredDate(res.data, fallbackExpiry),
-        qrString,
+        qrString:      directQr,
         vaNumber:      null,
         bank:          null,
         raw:           res.data,
       };
     }
+
+    // Ekstraksi token_id dari payment response DOKU
+    const resp = res.data.response as Record<string, unknown> | undefined;
+    const payment = (resp?.payment ?? res.data.payment) as Record<string, unknown> | undefined;
+    const tokenId = (payment?.token_id ?? res.data.token_id) as string | undefined;
+
+    if ((res.status === 200 || res.status === 201) && tokenId) {
+      const checkoutHost = IS_PROD ? "https://checkout.doku.com" : "https://checkout-sandbox.doku.com";
+      const qrisGenUrl = `${checkoutHost}/checkout/v1/payment/${encodeURIComponent(tokenId)}/generate-qris`;
+
+      const qrisGenRes = await fetch(qrisGenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Authorization": "bearer authnologin",
+        },
+        body: JSON.stringify({ token_id: tokenId }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (qrisGenRes.ok) {
+        const qrisData = (await qrisGenRes.json()) as Record<string, unknown>;
+        const rawQr = (qrisData.qr_code ?? qrisData.qr_string ?? qrisData.qrContent) as string | undefined;
+        if (rawQr && typeof rawQr === "string" && !rawQr.startsWith("http")) {
+          console.log(`[DOKU] Berhasil generate raw QRIS EMVCo string untuk ${p.orderCode}: ${rawQr.slice(0, 35)}...`);
+          return {
+            ok:            true,
+            invoiceNumber: p.orderCode,
+            expiredDate:   extractExpiredDate(res.data, fallbackExpiry),
+            qrString:      rawQr.trim(),
+            vaNumber:      null,
+            bank:          null,
+            raw:           { ...res.data, qris_generation: qrisData },
+          };
+        }
+      } else {
+        console.warn(`[DOKU] generate-qris endpoint HTTP ${qrisGenRes.status}`);
+      }
+    }
+
     console.warn(`[DOKU] Charge QRIS checkout response (HTTP ${res?.status}):`, JSON.stringify(res?.data ?? {}).slice(0, 300));
   } catch (err) {
     console.warn("[DOKU] Charge QRIS attempt error:", err);
@@ -589,15 +632,16 @@ function extractQrString(raw: Record<string, unknown>): string | null {
     raw.qr_content,
     resp?.qr_content,
     resp?.qrContent,
-    // Checkout payment URL (DOKU Checkout URL)
-    payment?.url,
-    payData?.url,
-    raw.url,
-    resp?.url,
   ];
 
   for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c.trim();
+    if (typeof c === "string" && c.trim()) {
+      const val = c.trim();
+      // Pastikan bukan URL web — QRIS WAJIB berupa raw string EMVCo (biasanya diawali 000201)
+      if (!val.startsWith("http://") && !val.startsWith("https://")) {
+        return val;
+      }
+    }
   }
 
   return null;
