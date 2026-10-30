@@ -8,6 +8,7 @@ import { LikeButton } from "./LikeButton";
 import { useLikes } from "./LikesProvider";
 import type { Project } from "@/lib/projects/types";
 import { saveGridState } from "@/lib/projects/session-cache";
+import { OptimizedAutoplayVideo } from "@/components/ui/OptimizedAutoplayVideo";
 
 function formatDuration(s: number) {
   const m = Math.floor(s / 60);
@@ -62,15 +63,11 @@ export function ProjectCard({ project, priority = false }: Props) {
               priority={priority}
             />
           ) : (
-            <video
+            <OptimizedAutoplayVideo
               src={videoSource!}
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
+              poster={thumb.src && !/\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(thumb.src) ? thumb.src : undefined}
               className="w-full h-auto block"
-              aria-label={thumb.alt}
+              ariaLabel={thumb.alt}
             />
           )
         ) : thumb.src ? (

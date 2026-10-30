@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { OptimizedAutoplayVideo } from "@/components/ui/OptimizedAutoplayVideo";
 import { DATA_MODE } from "@/lib/projects/repo";
 import type { Project } from "@/lib/projects/types";
 
@@ -101,15 +102,12 @@ export function FeaturedWork() {
                         className="w-full h-auto block object-cover"
                       />
                     ) : (
-                      // Video file — autoplay muted
-                      <video
+                      // Video file — smooth GPU-accelerated viewport autoplay
+                      <OptimizedAutoplayVideo
                         src={project.videoSrc!}
-                        autoPlay
-                        muted
-                        loop
-                        playsInline
+                        poster={thumbSrc && !/\.(mp4|webm|mov|ogg|m4v)(\?.*)?$/i.test(thumbSrc) ? thumbSrc : undefined}
                         className="w-full h-auto block"
-                        aria-label={project.title}
+                        ariaLabel={project.title}
                       />
                     )
                   ) : thumbSrc ? (

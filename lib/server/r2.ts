@@ -92,10 +92,8 @@ export async function presignPut(
     CacheControl: cacheControl,
   });
 
-  const signableHeaders = new Set([
-    "content-type",
-    ...(cacheControl ? ["cache-control"] : []),
-  ]);
+  // Hanya tandatangani content-type agar browser tidak ditolak jika CORS R2 belum menyetel cache-control
+  const signableHeaders = new Set(["content-type"]);
 
   const url = await getSignedUrl(getR2(), cmd, {
     expiresIn: 300, // 5 menit
@@ -104,7 +102,6 @@ export async function presignPut(
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,
-    ...(cacheControl ? { "Cache-Control": cacheControl } : {}),
   };
 
   return { url, headers };

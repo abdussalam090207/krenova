@@ -17,6 +17,7 @@ const ALLOWED_IMAGES = new Set([
 const ALLOWED_VIDEOS = new Set([
   "video/mp4",
   "video/webm",
+  "video/quicktime",
 ]);
 
 const DANGEROUS_MIMES = new Set([
@@ -36,7 +37,25 @@ const MIME_EXT_MAP: Record<string, string> = {
   "image/gif": "gif",
   "video/mp4": "mp4",
   "video/webm": "webm",
+  "video/quicktime": "mp4",
 };
+
+function normalizeContentType(rawMime: string, fileName: string): string {
+  const m = (rawMime || "").toLowerCase().trim();
+  if (m === "image/jpg" || m === "image/pjpeg") return "image/jpeg";
+  if (!m || m === "application/octet-stream") {
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+    if (ext === "png") return "image/png";
+    if (ext === "webp") return "image/webp";
+    if (ext === "avif") return "image/avif";
+    if (ext === "gif") return "image/gif";
+    if (ext === "mp4") return "video/mp4";
+    if (ext === "webm") return "video/webm";
+    if (ext === "mov") return "video/quicktime";
+  }
+  return m;
+}
 
 export async function OPTIONS(req: NextRequest) {
   const res = handleCorsOptions(req);
@@ -72,7 +91,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { kind, ownerId, fileName, contentType, size } = body;
+  const { kind, ownerId, size } = body;
+  const fileName = (body.fileName || "").trim();
+  const rawContentType = (body.contentType || "").trim();
 
   if (!kind || !["project-media", "catalog-media", "catalog-private"].includes(kind)) {
     return NextResponse.json(
@@ -81,16 +102,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!fileName || typeof fileName !== "string" || fileName.includes("..")) {
+  if (!fileName || fileName.includes("..")) {
     return NextResponse.json(
       { error: "Nama file tidak valid atau mengandung path traversal." },
       { status: 400, headers: corsHeaders },
     );
   }
 
-  if (!contentType || typeof contentType !== "string") {
+  const contentType = normalizeContentType(rawContentType, fileName);
+
+  if (!contentType) {
     return NextResponse.json(
-      { error: "Content-Type wajib diisi." },
+      { error: "Content-Type tidak dapat ditentukan." },
       { status: 400, headers: corsHeaders },
     );
   }
@@ -119,14 +142,14 @@ export async function POST(req: NextRequest) {
 
     if (!isImage && !isVideo) {
       return NextResponse.json(
-        { error: `Tipe file tidak diizinkan: ${contentType}. Hanya format gambar & video (MP4/WebM) yang diterima.` },
+        { error: `Tipe file tidak diizinkan: ${contentType}. Hanya format gambar & video (MP4/WebM/MOV) yang diterima.` },
         { status: 400, headers: corsHeaders },
       );
     }
 
-    if (isImage && size > 8 * 1024 * 1024) {
+    if (isImage && size > 25 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "Ukuran gambar melebihi batas maksimal 8 MB." },
+        { error: "Ukuran gambar melebihi batas maksimal 25 MB." },
         { status: 400, headers: corsHeaders },
       );
     }
@@ -163,9 +186,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (isImage && size > 8 * 1024 * 1024) {
+    if (isImage && size > 25 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "Ukuran media promosi melebihi 8 MB." },
+        { error: "Ukuran media promosi melebihi 25 MB." },
         { status: 400, headers: corsHeaders },
       );
     }

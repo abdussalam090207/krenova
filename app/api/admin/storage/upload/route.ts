@@ -42,7 +42,7 @@ const MIME_EXT_MAP: Record<string, string> = {
 };
 
 function normalizeContentType(rawMime: string, fileName: string): string {
-  let m = (rawMime || "").toLowerCase().trim();
+  const m = (rawMime || "").toLowerCase().trim();
   if (m === "image/jpg" || m === "image/pjpeg") return "image/jpeg";
   if (!m || m === "application/octet-stream") {
     const ext = fileName.split(".").pop()?.toLowerCase();
